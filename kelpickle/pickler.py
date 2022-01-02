@@ -20,6 +20,8 @@ class Pickler:
             list: self.flatten_by_list,
             dict: self.flatten_by_dict,
             type: self.flatten_by_type,
+            set: self.flatten_by_set,
+            tuple: self.flatten_by_tuple,
             **{native_type: null_function for native_type in NATIVE_TYPES}
         }
 
@@ -49,6 +51,8 @@ class Pickler:
 
     def default_flatten(self, instance):
         instance_class = type(instance)
+        # TODO: Make this whole thing beautiful, its fucking stupid that you need to reference __reduce__ and
+        #  __reduce_ex__ in multiple places and its ugly as fuck.
         if instance_class.__reduce_ex__ is object.__reduce_ex__ and instance_class.__reduce__ is object.__reduce__:
             # Instance did not implement a custom reduce. That means we may implement a syntactic sugar and flatten our
             # instance differently
@@ -101,3 +105,9 @@ class Pickler:
 
     def flatten_by_type(self, instance: type) -> str:
         return f'{instance.__module__}/{instance.__qualname__}'
+
+    def flatten_by_set(self, instance: set) -> dict:
+        return {'py/set': list(instance)}
+
+    def flatten_by_tuple(self, instance: tuple) -> dict:
+        return {'py/tuple': instance}

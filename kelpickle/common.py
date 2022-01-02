@@ -6,7 +6,7 @@ from typing import Optional, TypeAlias, Any, Callable, Iterable, TypeVar
 # Represents the generic instance one would want to pickle
 InstanceType = TypeVar('InstanceType')
 InstanceState: TypeAlias = dict[str, Any] | tuple[dict[str, Any], dict[str, Any]]
-ReduceResult: TypeAlias = tuple[
+ReduceResult: TypeAlias = str | tuple[
     Callable,
     Iterable,
     Optional[InstanceState | Any],

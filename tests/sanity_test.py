@@ -26,7 +26,9 @@ class CustomObject:
         ['עברית'],
         [[1, 2, 3]],
         [{'a': 2}],
-        [CustomObject(3)]
+        [CustomObject(3)],
+        (1, 2, 3),
+        {1, 2, 3}
     ]
 )
 def test_sanity(value):

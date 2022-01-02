@@ -12,7 +12,8 @@ class Unpickler:
         self.type_to_restore_function: dict[type, Callable] = {
             list: self.restore_by_list,
             type: self.restore_by_type,
-            dict: self.default_restore,
+            dict: self.restore_special_objects,
+
             **{native_type: null_function for native_type in NATIVE_TYPES}
         }
 
@@ -24,23 +25,37 @@ class Unpickler:
         restorer = self.type_to_restore_function[flattened_instance_type]
         return restorer(flattened_instance)
 
-    def default_restore(self, flattened_instance: dict):
-        flattened_reduce = flattened_instance.get('py/reduce')
-        if flattened_reduce:
-            reduce_result = self.restore(flattened_reduce)
-            return self.build_from_reduce(reduce_result)
+    def restore_special_objects(self, flattened_instance: dict):
+        """
+        Restore objects that cannot be naively flattened as jsonic dicts.
 
-        flattened_instance_type = flattened_instance.get('py/object')
-        if flattened_instance_type:
-            instance_type = self.restore_by_type(flattened_instance_type)
-            instance: instance_type = object.__new__(instance_type)
+        :param flattened_instance: The flattened object to restore
+        :return: The original object as was passed to the "flatten" function
+        """
+        if 'py/set' in flattened_instance:
+            return self.restore_by_set(flattened_instance)
 
-            instance_state = flattened_instance['py/state']
-            self.set_state(instance, instance_state)
+        if 'py/tuple' in flattened_instance:
+            return self.restore_by_tuple(flattened_instance)
 
-            return instance
+        if 'py/reduce' in flattened_instance:
+            return self.restore_by_reduce(flattened_instance)
+
+        if 'py/object' in flattened_instance:
+            return self.restore_by_state(flattened_instance)
 
         return self.restore_by_dict(flattened_instance)
+
+    def restore_by_state(self, flattened_instance: dict):
+        flattened_instance_type = flattened_instance['py/object']
+        instance_type = self.restore_by_type(flattened_instance_type)
+        instance: instance_type = object.__new__(instance_type)
+
+        instance_state = flattened_instance['py/state']
+        self.set_state(instance, instance_state)
+
+        return instance
+
 
     def default_set_state(self, instance, state: InstanceState) -> None:
         """
@@ -75,6 +90,12 @@ class Unpickler:
         else:
             set_state(state)
 
+    def restore_by_reduce(self, flattened_instance: dict):
+        flattened_reduce = flattened_instance.get('py/reduce')
+        if flattened_reduce:
+            reduce_result = self.restore(flattened_reduce)
+            return self.build_from_reduce(reduce_result)
+
     def build_from_reduce(self, reduce_result: ReduceResult) -> Any:
         """
         Build an instance from the result of a previously called __reduce__/__reduce_ex__.
@@ -85,6 +106,7 @@ class Unpickler:
         :param reduce_result: The result of __reduce__/__reduce_ex__
         :return: The newly created instance.
         """
+        # TODO: Add support for string reduce results
         callable_, args, state, list_items, dict_items, custom_set_state = reduce_result
 
         # Step 1: Create the instance
@@ -134,3 +156,11 @@ class Unpickler:
             current_object = getattr(current_object, member_name)
 
         return current_object
+
+    def restore_by_set(self, flattened_instance: dict) -> set:
+        return set(flattened_instance['py/set'])
+
+    def restore_by_tuple(self, flattened_instance: dict) -> tuple:
+        # TODO: Create the tuple one member at a time so you can record reference of the set beforehand
+        #  (Use PyTuple_SET)
+        return tuple(flattened_instance['py/tuple'])
