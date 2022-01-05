@@ -2,19 +2,32 @@ from __future__ import annotations
 
 import json
 
+from types import FunctionType, ModuleType
 from typing import Any, Callable
 
-from kelpickle.common import NATIVE_TYPES, InstanceState, ReduceResult, null_function
+from kelpickle.common import NATIVE_TYPES, InstanceState, ReduceResult, null_function, STRATEGY_KEY
+
+
+class SetStateError(ValueError):
+    pass
 
 
 class Unpickler:
     def __init__(self):
         self.type_to_restore_function: dict[type, Callable] = {
             list: self.restore_by_list,
-            type: self.restore_by_type,
             dict: self.restore_special_objects,
 
             **{native_type: null_function for native_type in NATIVE_TYPES}
+        }
+
+        self.supported_strategies: dict[str, Callable] = {
+            'set': self.restore_by_set,
+            'tuple': self.restore_by_tuple,
+            'reduce': self.restore_by_reduce,
+            'state': self.restore_by_state,
+            'import': self.restore_by_import,
+            'dict': self.restore_by_dict
         }
 
     def unpickle(self, serialized_instance):
@@ -27,54 +40,60 @@ class Unpickler:
 
     def restore_special_objects(self, flattened_instance: dict):
         """
-        Restore objects that cannot be naively flattened as jsonic dicts.
+        Restore non-jsonic objects that has to be represented by a dict
 
         :param flattened_instance: The flattened object to restore
         :return: The original object as was passed to the "flatten" function
         """
-        if 'py/set' in flattened_instance:
-            return self.restore_by_set(flattened_instance)
 
-        if 'py/tuple' in flattened_instance:
-            return self.restore_by_tuple(flattened_instance)
+        strategy = flattened_instance.get(STRATEGY_KEY, 'dict')
+        restore_function = self.supported_strategies[strategy]
 
-        if 'py/reduce' in flattened_instance:
-            return self.restore_by_reduce(flattened_instance)
-
-        if 'py/object' in flattened_instance:
-            return self.restore_by_state(flattened_instance)
-
-        return self.restore_by_dict(flattened_instance)
+        return restore_function(flattened_instance)
 
     def restore_by_state(self, flattened_instance: dict):
-        flattened_instance_type = flattened_instance['py/object']
-        instance_type = self.restore_by_type(flattened_instance_type)
+        flattened_instance_type = flattened_instance['type']
+        instance_type = self.restore_import_string(flattened_instance_type)
         instance: instance_type = object.__new__(instance_type)
 
-        instance_state = flattened_instance['py/state']
+        instance_state = self.restore(flattened_instance['state'])
         self.set_state(instance, instance_state)
 
         return instance
 
-
     def default_set_state(self, instance, state: InstanceState) -> None:
         """
-        This the default way a state is set on an instance if it didn't implement its own __setstate__.
+        This is the default way a state is set on an instance if it didn't implement its own __setstate__.
 
         :param instance: The instance on which we will set the given state.
         :param state: The state of the instance.
         """
-        slot_state = {}
+        if isinstance(state, dict):
+            dynamic_attributes = state
+            slotted_attributes = {}
 
-        if isinstance(state, tuple):
-            state, slot_state = state
+        elif isinstance(state, tuple) and len(state) is 2:
+            dynamic_attributes = state[0] or {}
+            slotted_attributes = state[1] or {}
 
+        else:
+            raise SetStateError(
+                f'Given instance has a state is of type {type(state)}. By default, states may only be a mapping of '
+                f'attributes or a tuple of mappings. Make sure the class {type(instance)} has either:\n'
+                f'1. Implemented a __getstate__ that returns valid default states.\n'
+                f'2. Implemented a __setstate__ that can handle such states\n'
+                f'3. Implemented a valid __reduce__/__reduce_ex__.')
+
+        # Dynamic attributes are being changed directly through the instance's __dict__ so it won't trigger custom
+        # implementations of __setattr__
         instance_dict = instance.__dict__
-        for key, value in state.items():
-            instance_dict[key] = value
+        for attribute_name, attribute_value in dynamic_attributes.items():
+            instance_dict[attribute_name] = attribute_value
 
-        for key, value in slot_state:
-            setattr(instance, key, value)
+        # Unlike dynamic attributes, slotted attributes aren't stored on the instance's __dict__ and therefore can only
+        # be set normally
+        for attribute_name, attribute_value in slotted_attributes:
+            setattr(instance, attribute_name, attribute_value)
 
     def set_state(self, instance, state: InstanceState) -> None:
         """
@@ -91,10 +110,10 @@ class Unpickler:
             set_state(state)
 
     def restore_by_reduce(self, flattened_instance: dict):
-        flattened_reduce = flattened_instance.get('py/reduce')
-        if flattened_reduce:
-            reduce_result = self.restore(flattened_reduce)
-            return self.build_from_reduce(reduce_result)
+        flattened_reduce = flattened_instance['value']
+        reduce_result = self.restore(flattened_reduce)
+
+        return self.build_from_reduce(reduce_result)
 
     def build_from_reduce(self, reduce_result: ReduceResult) -> Any:
         """
@@ -149,18 +168,21 @@ class Unpickler:
 
         return instance
 
-    def restore_by_type(self, flattened_instance: str) -> type:
-        module_name, qual_name = flattened_instance.split('/')
+    def restore_import_string(self, import_string: str, /):
+        module_name, qual_name = import_string.split('/')
         current_object = __import__(module_name, level=0, fromlist=[''])
         for member_name in qual_name.split('.'):
             current_object = getattr(current_object, member_name)
 
         return current_object
 
+    def restore_by_import(self, flattened_instance: dict, /):
+        return self.restore_import_string(flattened_instance['import_string'])
+
     def restore_by_set(self, flattened_instance: dict) -> set:
-        return set(flattened_instance['py/set'])
+        return set(flattened_instance['value'])
 
     def restore_by_tuple(self, flattened_instance: dict) -> tuple:
         # TODO: Create the tuple one member at a time so you can record reference of the set beforehand
         #  (Use PyTuple_SET)
-        return tuple(flattened_instance['py/tuple'])
+        return tuple(flattened_instance['value'])

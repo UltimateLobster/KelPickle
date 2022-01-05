@@ -13,22 +13,30 @@ class CustomObject:
         return self.__class__ == other.__class__ and self.x == other.x
 
 
+def custom_function():
+    pass
+
+
 @pytest.mark.parametrize(
     'value',
     [
-        [None],
-        [True],
-        [1],
-        [1.2],
-        [1.0],
-        [1000000000000000000000],
-        ['some_string'],
-        ['עברית'],
-        [[1, 2, 3]],
-        [{'a': 2}],
-        [CustomObject(3)],
+        None,
+        True,
+        1,
+        1.2,
+        1.0,
+        1000000000000000000000,
+        'some_string',
+        'עברית',
+        [1, 2, 3],
         (1, 2, 3),
-        {1, 2, 3}
+        {1, 2, 3},
+        {'a': 2},
+        CustomObject.__module__,
+        CustomObject,
+        custom_function,
+        CustomObject(3),
+
     ]
 )
 def test_sanity(value):

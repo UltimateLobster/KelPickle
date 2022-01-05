@@ -22,3 +22,6 @@ _T = TypeVar('_T')
 
 def null_function(x: _T) -> _T:
     return x
+
+
+STRATEGY_KEY = 'py/strategy'

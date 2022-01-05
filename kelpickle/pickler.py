@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 
 from typing import Callable
+from types import FunctionType, ModuleType
 from pickle import DEFAULT_PROTOCOL
-from kelpickle.common import NATIVE_TYPES, ReduceResult, null_function
+from kelpickle.common import NATIVE_TYPES, ReduceResult, null_function, STRATEGY_KEY
 
 
 class PicklingError(Exception):
@@ -19,7 +20,9 @@ class Pickler:
         self.type_to_restore_function: dict[type, Callable] = {
             list: self.flatten_by_list,
             dict: self.flatten_by_dict,
-            type: self.flatten_by_type,
+            type: self.flatten_by_import,
+            FunctionType: self.flatten_by_import,
+            ModuleType: self.flatten_by_import,
             set: self.flatten_by_set,
             tuple: self.flatten_by_tuple,
             **{native_type: null_function for native_type in NATIVE_TYPES}
@@ -47,6 +50,7 @@ class Pickler:
         :param instance: The instance whose state shall be returned.
         :return: The given instance's state.
         """
+        # TODO: Add support for slotted instances.
         return instance.__dict__
 
     def default_flatten(self, instance):
@@ -76,7 +80,9 @@ class Pickler:
         flattened_result = [self.flatten(x) for x in reduce_result]
         flattened_result.extend([None] * (6 - len(flattened_result)))
 
-        return {'py/reduce': flattened_result}
+        return {
+            STRATEGY_KEY: 'reduce',
+            'value': flattened_result}
 
     def flatten_by_state(self, instance):
         try:
@@ -89,8 +95,9 @@ class Pickler:
             instance_state = instance_get_state()
 
         return {
-            'py/object': self.flatten(instance.__class__),
-            'py/state': self.flatten(instance_state)
+            STRATEGY_KEY: 'state',
+            'type': self.get_import_string(instance.__class__),
+            'state': self.flatten(instance_state)
         }
 
     def flatten_by_list(self, instance: list) -> list:
@@ -103,11 +110,23 @@ class Pickler:
 
         return flattened_instance
 
-    def flatten_by_type(self, instance: type) -> str:
+    def flatten_by_import(self, instance: type) -> dict:
+        return {
+            STRATEGY_KEY: 'import',
+            'import_string': self.get_import_string(instance)
+        }
+
+    def get_import_string(self, instance) -> str:
         return f'{instance.__module__}/{instance.__qualname__}'
 
     def flatten_by_set(self, instance: set) -> dict:
-        return {'py/set': list(instance)}
+        return {
+            STRATEGY_KEY: 'set',
+            'value': [self.flatten(member) for member in instance]
+        }
 
     def flatten_by_tuple(self, instance: tuple) -> dict:
-        return {'py/tuple': instance}
+        return {
+            STRATEGY_KEY: 'tuple',
+            'value': [self.flatten(member) for member in instance]
+        }
