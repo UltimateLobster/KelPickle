@@ -1,0 +1,22 @@
+Implement with github issues.
+
+Features:
+    Unrestorable objects
+    Reference management
+    Proxies
+    Cython
+    Complex keys
+    bytes support
+    datetime support
+    timezone support
+    metadata and pickling flags
+
+Tests:
+    tests with github action
+    implement tests with tox
+    Cross-interpreter tests
+    Fuzz testing
+    Regression tests
+
+Probably will never happen:
+    binary format?
