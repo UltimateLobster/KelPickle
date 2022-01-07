@@ -1,6 +1,9 @@
 Implement with github issues.
 
 Features:
+    shortcut for __newobj__ and __newobj_ex__ for reduce
+    support for string reduce
+    Dicts with saved words
     Unrestorable objects
     Reference management
     Proxies
@@ -10,6 +13,8 @@ Features:
     datetime support
     timezone support
     metadata and pickling flags
+    auto deployment with github actions
+    make this an actual library (.pyproject.toml)
 
 Tests:
     tests with github action
