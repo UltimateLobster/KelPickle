@@ -18,6 +18,12 @@ legacy_tox_ini="""
 envlist = py310, flake8, mypy
 isolated_build = True
 
+[gh-actions]
+python =
+    3.8: py38
+    3.8: py39
+    3.10: py310, mypy, flake8
+
 [testenv]
 commands =
     python -m pip install pip -U
