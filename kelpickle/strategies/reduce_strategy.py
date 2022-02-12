@@ -52,14 +52,7 @@ def build_from_reduce(reduce_result: ReduceResult) -> Any:
     # Step 1: Create the instance
     instance = callable_(*args)
 
-    # Step 2: Set the new state
-    if state is not None:
-        if custom_set_state:
-            custom_set_state(instance, state)
-        else:
-            set_state(instance, state)
-
-    # Step 3: Add items
+    # Step 2: Add items
     if list_items is not None:
         try:
             extend = instance.extend
@@ -72,10 +65,17 @@ def build_from_reduce(reduce_result: ReduceResult) -> Any:
         else:
             extend(list_items)
 
-    # Step 4: Set items
+    # Step 3: Set items
     if dict_items is not None:
         for key, value in dict_items:
             instance[key] = value
+
+    # Step 4: Set the new state
+    if state is not None:
+        if custom_set_state:
+            custom_set_state(instance, state)
+        else:
+            set_state(instance, state)
 
     return instance
 
@@ -88,6 +88,8 @@ class ReduceStrategy(BaseStrategy):
     @staticmethod
     def populate_json(instance: T, jsonified_instance: dict[str], pickler: Pickler) -> None:
         reduce_result = reduce(instance)
+        if isinstance(reduce_result, str):
+            jsonified_instance['value'] = reduce_result
 
         jsonified_result = [pickler.flatten(x) for x in reduce_result]
         jsonified_result.extend([None] * (6 - len(jsonified_result)))
