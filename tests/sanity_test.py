@@ -36,6 +36,7 @@ def custom_function():
         CustomObject,
         custom_function,
         CustomObject(3),
+        ...
     ]
 )
 def test_sanity(value):

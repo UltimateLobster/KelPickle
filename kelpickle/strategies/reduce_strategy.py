@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sys
 from pickle import DEFAULT_PROTOCOL
 from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias
 
 from kelpickle.strategies.base_strategy import BaseStrategy, T
 from kelpickle.strategies.state_strategy import set_state, InstanceState
+from kelpickle.strategies.import_strategy import restore_import_string
 
 if TYPE_CHECKING:
     from kelpickle.pickler import Pickler
@@ -23,6 +25,34 @@ ReduceResult: TypeAlias = str | tuple[
 
 class UnreducableObject(ValueError):
     pass
+
+
+class ReduceError(ValueError):
+    pass
+
+
+def get_containing_module(import_string: str) -> Optional[str]:
+    """
+    This ugly ass function is a result of pickle supporting weird shit. When a __reduce__/__reduce_ex__ function returns
+    a string, that is an import string to be used in the unpickling process. Only problem is, the import string is
+    missing the module name. We literally have no way of finding the module name, therefore we need to bruteforce our
+    way through 'sys.modules' until we find a module where this is importable (This is literally how pickle does it).
+
+    :param import_string: The import string as returned from the __reduce__/__reduce_ex__ function.
+    :return: The import string of the module containing the given object.
+    """
+    # We need to iterate over a copy of sys.modules because it might be edited as we iterate (additional modules may
+    # be dynamically imported as getattr is called)
+    for module_name, module in sys.modules.copy().items():
+        current_parent = module
+        try:
+            for import_part in import_string.split("."):
+                current_parent = getattr(current_parent, import_part)
+        except AttributeError:
+            # We didn't manage to import the entire object, that means this module is not the correct one.
+            continue
+
+        return module_name
 
 
 def reduce(instance: T) -> ReduceResult:
@@ -89,7 +119,14 @@ class ReduceStrategy(BaseStrategy):
     def populate_json(instance: T, jsonified_instance: dict[str], pickler: Pickler) -> None:
         reduce_result = reduce(instance)
         if isinstance(reduce_result, str):
-            jsonified_instance['value'] = reduce_result
+            # The result is an import string that's missing the module part.
+            containing_module = get_containing_module(reduce_result)
+            if containing_module is None:
+                raise ReduceError(f"Could not pickle object of type {type(instance)} with reduce result {reduce_result}"
+                                  f", it is not importable from any module.")
+
+            jsonified_instance['value'] = f"{containing_module}/{reduce_result}"
+            return
 
         jsonified_result = [pickler.flatten(x) for x in reduce_result]
         jsonified_result.extend([None] * (6 - len(jsonified_result)))
@@ -99,6 +136,8 @@ class ReduceStrategy(BaseStrategy):
     @staticmethod
     def restore(jsonified_object: dict[str], unpickler: Unpickler) -> T:
         flattened_reduce = jsonified_object['value']
-        reduce_result = unpickler.restore(flattened_reduce)
+        if isinstance(flattened_reduce, str):
+            return restore_import_string(flattened_reduce)
 
+        reduce_result = tuple(unpickler.restore(member) for member in flattened_reduce)
         return build_from_reduce(reduce_result)
