@@ -1,16 +1,32 @@
 from __future__ import annotations
 import pytest
+from dataclasses import dataclass
 
 from kelpickle.pickler import Pickler
 from kelpickle.unpickler import Unpickler
 
 
+@dataclass
 class CustomObject:
-    def __init__(self, x: int):
-        self.x = x
+    x: int
 
-    def __eq__(self, other: CustomObject):
-        return self.__class__ == other.__class__ and self.x == other.x
+
+class CustomStateObject(CustomObject):
+    def __init__(self, x: int):
+        super().__init__(x)
+        self.y = x
+
+    def __getstate__(self):
+        return {"x": self.x}
+
+    def __setstate__(self, state):
+        self.x = state["x"]
+        self.y = state["x"]
+
+
+class CustomReduceObject(CustomObject):
+    def __reduce__(self):
+        return CustomReduceObject, (self.x,), {}
 
 
 def custom_function():
@@ -36,6 +52,8 @@ def custom_function():
         CustomObject,
         custom_function,
         CustomObject(3),
+        CustomStateObject(3),
+        CustomReduceObject(3),
         ...
     ]
 )
