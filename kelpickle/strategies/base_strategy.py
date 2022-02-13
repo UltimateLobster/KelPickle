@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypeVar, TYPE_CHECKING
+from typing import TypeVar, TYPE_CHECKING, Generic
 from abc import ABCMeta, abstractmethod
 
 if TYPE_CHECKING:
@@ -11,8 +11,7 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 
-class BaseStrategy(metaclass=ABCMeta):
-
+class BaseStrategy(Generic[T], metaclass=ABCMeta):
     @staticmethod
     @abstractmethod
     def get_strategy_name() -> str:

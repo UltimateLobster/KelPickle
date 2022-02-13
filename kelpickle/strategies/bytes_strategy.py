@@ -5,15 +5,15 @@ from kelpickle.strategies.base_strategy import BaseStrategy, T
 from kelpickle.unpickler import Unpickler
 
 
-class BytesStrategy(BaseStrategy):
+class BytesStrategy(BaseStrategy[bytes]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'base64'
 
     @staticmethod
-    def populate_json(instance: bytes, jsonified_instance: dict[str], pickler: Pickler) -> None:
+    def populate_json(instance: bytes, jsonified_instance: dict[str, str], pickler: Pickler) -> None:
         jsonified_instance['buffer'] = base64.b64encode(instance).decode('utf-8')
 
     @staticmethod
-    def restore(jsonified_object: dict[str], unpickler: Unpickler) -> bytes:
+    def restore(jsonified_object: dict[str, str], unpickler: Unpickler) -> bytes:
         return base64.b64decode(jsonified_object['buffer'])

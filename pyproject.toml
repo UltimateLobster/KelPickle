@@ -6,8 +6,8 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
-[tool.pytest.ini-options]
-addopts = "--cov=kelpickle"
+[tool.pytest.ini_options]
+addopts = "--cov=./kelpickle --cov-report=html:./reports/pytest"
 testpaths = [
     "tests"
 ]
@@ -32,15 +32,12 @@ commands =
 
 
 [testenv:mypy]
-deps=mypy
+deps=.[dev]
 commands=mypy kelpickle
 
 [testenv:flake8]
-deps=flake8
+deps=.[dev]
 commands = flake8 kelpickle tests
-
-[flake8]
-max-file-length = 160
 """
 
 [tool.mypy]
@@ -58,5 +55,5 @@ strict_equality = true
 pretty = true
 show_traceback = true
 raise_exceptions = true
-html_report = "./mypy_reports/report.html"
-junit_xml = "./mypy_reports/report.xml"
+html_report = "./reports/mypy"
+junit_xml = "./reports/mypy.xml"
