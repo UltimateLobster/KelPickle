@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from kelpickle.strategies.base_strategy import BaseStrategy, T
+
+from kelpickle.common import Json
+from kelpickle.strategies.base_strategy import BaseStrategy
 
 
 if TYPE_CHECKING:
@@ -9,17 +11,17 @@ if TYPE_CHECKING:
     from kelpickle.unpickler import Unpickler
 
 
-class TupleStrategy(BaseStrategy):
+class TupleStrategy(BaseStrategy[tuple]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'tuple'
 
     @staticmethod
-    def populate_json(instance: tuple, jsonified_instance: dict[str], pickler: Pickler) -> None:
-        jsonified_instance['value'] = [pickler.flatten(member) for member in instance]
+    def flatten(instance: tuple, pickler: Pickler) -> Json:
+        return {'value': [pickler.flatten(member) for member in instance]}
 
     @staticmethod
-    def restore(jsonified_object: dict[str], unpickler: Unpickler) -> tuple:
+    def restore(jsonified_object: Json, unpickler: Unpickler) -> tuple:
         # TODO: Create the tuple one member at a time so you can record reference of the set beforehand
         #  (Use PyTuple_SET)
         return tuple(unpickler.restore(member) for member in jsonified_object['value'])

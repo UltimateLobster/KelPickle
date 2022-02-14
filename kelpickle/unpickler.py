@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-from typing import Callable, Type, Any
+from typing import Callable, Type, Any, Iterable
 
-from kelpickle.common import NATIVE_TYPES, identity, STRATEGY_KEY
+from kelpickle.common import NATIVE_TYPES, identity, STRATEGY_KEY, Json, Jsonable, JsonList
 from kelpickle.strategies.base_strategy import BaseStrategy
 from kelpickle.strategies.dict_strategy import DictStrategy
 from kelpickle.strategies.import_strategy import ImportStrategy
@@ -19,33 +19,34 @@ class UnsupportedStrategy(ValueError):
 
 
 class Unpickler:
+    SUPPORTED_STRATEGIES: Iterable[Type[BaseStrategy]] = (
+        ImportStrategy,
+        SetStrategy,
+        TupleStrategy,
+        StateStrategy,
+        ReduceStrategy,
+        DictStrategy
+    )
     name_to_strategy: dict[str, Type[BaseStrategy]] = {
         strategy.get_strategy_name(): strategy
-        for strategy in (
-            ImportStrategy,
-            SetStrategy,
-            TupleStrategy,
-            StateStrategy,
-            ReduceStrategy,
-            DictStrategy
-        )
+        for strategy in SUPPORTED_STRATEGIES
     }
 
-    def __init__(self):
-        self.flattened_type_to_restore_function: dict[type, Callable[[Any], Any]] = {
+    def __init__(self) -> None:
+        self.flattened_type_to_restore_function: dict[type, Callable[[Jsonable], Any]] = {
             list: self.restore_by_list,
             dict: self.restore_by_strategy,
             **{native_type: identity for native_type in NATIVE_TYPES}
         }
 
-    def unpickle(self, serialized_instance):
+    def unpickle(self, serialized_instance: str) -> Any:
         return self.restore(json.loads(serialized_instance))
 
-    def restore(self, flattened_instance):
+    def restore(self, flattened_instance: Jsonable) -> Any:
         restorer = self.flattened_type_to_restore_function[flattened_instance.__class__]
         return restorer(flattened_instance)
 
-    def restore_by_strategy(self, flattened_instance: dict):
+    def restore_by_strategy(self, flattened_instance: Json) -> Any:
         """
         Restore non-jsonic objects that has to be represented by a dict
 
@@ -61,5 +62,5 @@ class Unpickler:
 
         return strategy.restore(flattened_instance, self)
 
-    def restore_by_list(self, flattened_instance: list):
+    def restore_by_list(self, flattened_instance: JsonList) -> list:
         return [self.restore(member) for member in flattened_instance]

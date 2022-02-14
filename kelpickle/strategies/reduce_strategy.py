@@ -4,6 +4,7 @@ import sys
 from pickle import DEFAULT_PROTOCOL
 from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias
 
+from kelpickle.common import Json, JsonList
 from kelpickle.strategies.base_strategy import BaseStrategy, T
 from kelpickle.strategies.state_strategy import set_state, InstanceState
 from kelpickle.strategies.import_strategy import restore_import_string
@@ -13,7 +14,8 @@ if TYPE_CHECKING:
     from kelpickle.unpickler import Unpickler
 
 
-ReduceResult: TypeAlias = str | tuple[
+# __reduce__ functions may return these objects which can be used to rebuild the original object
+ObjectBuildInstructions: TypeAlias = tuple[
     Callable,
     Iterable,
     Optional[InstanceState | Any],
@@ -21,6 +23,8 @@ ReduceResult: TypeAlias = str | tuple[
     Optional[Iterable[tuple[str, Any]]],
     Optional[Callable[[Any, InstanceState], None]]
 ]
+
+ReduceResult: TypeAlias = str | ObjectBuildInstructions
 
 
 class UnreducableObject(ValueError):
@@ -54,21 +58,25 @@ def get_containing_module(import_string: str) -> Optional[str]:
 
         return module_name
 
+    return None
 
-def reduce(instance: T) -> ReduceResult:
+
+def reduce(instance: Any) -> ReduceResult:
+    reduce_func: Callable[[int], ReduceResult]
     if reduce_func := getattr(instance, "__reduce_ex__", None):
         return reduce_func(DEFAULT_PROTOCOL)
 
-    if reduce_func := getattr(instance, "__reduce__", None):
-        return reduce_func()
+    reduce_ex_func: Callable[..., ReduceResult]
+    if reduce_ex_func := getattr(instance, "__reduce__", None):
+        return reduce_ex_func()
 
     raise UnreducableObject(f'Instance of type {type(instance)} cannot be pickled. It does not implement the reduce '
                             f'protocol.', instance)
 
 
-def build_from_reduce(reduce_result: ReduceResult) -> Any:
+def build_from_reduce(reduce_result: ObjectBuildInstructions) -> Any:
     """
-    Build an instance from the result of a previously called __reduce__/__reduce_ex__.
+    Build an instance from the non-str result of a previously called __reduce__/__reduce_ex__.
 
     Explanation about reduce:
        # TODO: Add explanation here.
@@ -110,13 +118,13 @@ def build_from_reduce(reduce_result: ReduceResult) -> Any:
     return instance
 
 
-class ReduceStrategy(BaseStrategy):
+class ReduceStrategy(BaseStrategy[Any]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'reduce'
 
     @staticmethod
-    def populate_json(instance: T, jsonified_instance: dict[str], pickler: Pickler) -> None:
+    def flatten(instance: Any, pickler: Pickler) -> Json:
         reduce_result = reduce(instance)
         if isinstance(reduce_result, str):
             # The result is an import string that's missing the module part.
@@ -125,19 +133,20 @@ class ReduceStrategy(BaseStrategy):
                 raise ReduceError(f"Could not pickle object of type {type(instance)} with reduce result {reduce_result}"
                                   f", it is not importable from any module.")
 
-            jsonified_instance['value'] = f"{containing_module}/{reduce_result}"
-            return
+            return {'value': f"{containing_module}/{reduce_result}"}
 
         jsonified_result = [pickler.flatten(x) for x in reduce_result]
-        jsonified_result.extend([None] * (6 - len(jsonified_result)))
+        none_padding: JsonList = [None] * (6 - len(jsonified_result))
+        jsonified_result.extend(none_padding)
 
-        jsonified_instance['value'] = jsonified_result
+        return {'value': jsonified_result}
 
     @staticmethod
-    def restore(jsonified_object: dict[str], unpickler: Unpickler) -> T:
+    def restore(jsonified_object: Json, unpickler: Unpickler) -> Any:
         flattened_reduce = jsonified_object['value']
         if isinstance(flattened_reduce, str):
             return restore_import_string(flattened_reduce)
 
-        reduce_result = tuple(unpickler.restore(member) for member in flattened_reduce)
+        # TODO: type this in a better way
+        reduce_result: ObjectBuildInstructions = tuple(unpickler.restore(member) for member in flattened_reduce)  # type: ignore
         return build_from_reduce(reduce_result)

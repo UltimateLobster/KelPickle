@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from types import NoneType
-from typing import Optional, TypeAlias, Any, Callable, Iterable, TypeVar
+from typing import TypeVar, TypeAlias, Any
 
-# Represents the generic instance one would want to pickle
-InstanceType = TypeVar('InstanceType')
+# Obviously this is not the correct way to type these. Unfortunately the recursive nature of JSON prevents us to do it.
+# This will hopefully be supported in the future which will let us change this correctly
+JsonNative: TypeAlias = str | int | float | bool | NoneType
+Json: TypeAlias = dict[str, Any]
+JsonList: TypeAlias = list[Any]
+Jsonable: TypeAlias = Json | JsonList | JsonNative
 
 NATIVE_TYPES = (int, float, bool, str, NoneType)
 

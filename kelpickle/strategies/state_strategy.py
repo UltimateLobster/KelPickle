@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias, Callable, Type
 
+from kelpickle.common import Json
 from kelpickle.strategies.base_strategy import BaseStrategy, T
 from kelpickle.strategies.import_strategy import restore_import_string, get_import_string
 
@@ -18,7 +19,7 @@ class SetStateError(ValueError):
     pass
 
 
-def _default_get_state(instance):
+def _default_get_state(instance: Any) -> dict:
     """
     This is the default way to return an object's state if it didn't implement its own custom __getstate__.
 
@@ -35,9 +36,9 @@ def _default_get_state(instance):
     return instance.__dict__
 
 
-def get_state(instance):
+def get_state(instance: Any) -> Any:
     try:
-        instance_get_state = instance.__getstate__
+        instance_get_state: Callable[..., Any] = instance.__getstate__
     except AttributeError:
         # Instance does not implement __getstate__, so instead of calling it, we will call the default
         # implementation
@@ -46,7 +47,7 @@ def get_state(instance):
         return instance_get_state()
 
 
-def _default_set_state(instance, state: InstanceState) -> None:
+def _default_set_state(instance: Any, state: InstanceState) -> None:
     """
     This is the default way a state is set on an instance if it didn't implement its own __setstate__.
 
@@ -81,7 +82,7 @@ def _default_set_state(instance, state: InstanceState) -> None:
         setattr(instance, attribute_name, attribute_value)
 
 
-def set_state(instance, state: InstanceState) -> None:
+def set_state(instance: Any, state: InstanceState) -> None:
     """
     Set the given state on the given instance.
 
@@ -96,22 +97,24 @@ def set_state(instance, state: InstanceState) -> None:
         instance_set_state(state)
 
 
-class StateStrategy(BaseStrategy):
+class StateStrategy(BaseStrategy[Any]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'state'
 
     @staticmethod
-    def populate_json(instance: T, jsonified_instance: dict[str], pickler: Pickler) -> None:
+    def flatten(instance: Any, pickler: Pickler) -> Json:
         instance_state = get_state(instance)
 
-        jsonified_instance['type'] = get_import_string(instance.__class__)
-        jsonified_instance['state'] = pickler.flatten(instance_state)
+        return {
+            'type': get_import_string(instance.__class__),
+            'state': pickler.flatten(instance_state)
+        }
 
     @staticmethod
-    def restore(jsonified_object: dict[str], unpickler: Unpickler) -> T:
+    def restore(jsonified_object: Json, unpickler: Unpickler) -> Any:
         flattened_instance_type = jsonified_object['type']
-        instance_type = restore_import_string(flattened_instance_type)
+        instance_type: Type[Any] = restore_import_string(flattened_instance_type)
         instance = object.__new__(instance_type)
 
         instance_state = unpickler.restore(jsonified_object['state'])

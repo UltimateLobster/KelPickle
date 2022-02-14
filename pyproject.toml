@@ -21,7 +21,7 @@ isolated_build = True
 [gh-actions]
 python =
     3.8: py38
-    3.8: py39
+    3.9: py39
     3.10: py310, mypy, flake8
 
 [testenv]
@@ -38,6 +38,9 @@ commands=mypy kelpickle
 [testenv:flake8]
 deps=.[dev]
 commands = flake8 kelpickle tests
+
+[flake8]
+max-line-length = 120
 """
 
 [tool.mypy]
