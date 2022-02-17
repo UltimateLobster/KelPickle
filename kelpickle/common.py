@@ -10,6 +10,9 @@ Json: TypeAlias = dict[str, Any]
 JsonList: TypeAlias = list[Any]
 Jsonable: TypeAlias = Json | JsonList | JsonNative
 
+StateType = TypeVar('StateType')
+
+
 NATIVE_TYPES = (int, float, bool, str, NoneType)
 
 _T = TypeVar('_T')

@@ -3,21 +3,20 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from kelpickle.common import Json
-from kelpickle.strategies.base_strategy import BaseStrategy
-
+from kelpickle.strategies.base_strategy import JsonStrategy
 
 if TYPE_CHECKING:
     from kelpickle.pickler import Pickler
     from kelpickle.unpickler import Unpickler
 
 
-class TupleStrategy(BaseStrategy[tuple]):
+class TupleStrategy(JsonStrategy[tuple]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'tuple'
 
     @staticmethod
-    def flatten(instance: tuple, pickler: Pickler) -> Json:
+    def _flatten(instance: tuple, pickler: Pickler) -> Json:
         return {'value': [pickler.flatten(member) for member in instance]}
 
     @staticmethod

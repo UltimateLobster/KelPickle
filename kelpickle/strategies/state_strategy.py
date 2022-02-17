@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypeAlias, Callable, Type
 
 from kelpickle.common import Json
-from kelpickle.strategies.base_strategy import BaseStrategy, T
+from kelpickle.strategies.base_strategy import JsonStrategy
 from kelpickle.strategies.import_strategy import restore_import_string, get_import_string
 
 
@@ -97,13 +97,13 @@ def set_state(instance: Any, state: InstanceState) -> None:
         instance_set_state(state)
 
 
-class StateStrategy(BaseStrategy[Any]):
+class StateStrategy(JsonStrategy[Any]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'state'
 
     @staticmethod
-    def flatten(instance: Any, pickler: Pickler) -> Json:
+    def _flatten(instance: Any, pickler: Pickler) -> Json:
         instance_state = get_state(instance)
 
         return {

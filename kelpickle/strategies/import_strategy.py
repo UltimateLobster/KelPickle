@@ -4,7 +4,7 @@ from types import FunctionType, ModuleType
 from typing import TYPE_CHECKING, Any, Type, TypeAlias
 
 from kelpickle.common import Json
-from kelpickle.strategies.base_strategy import BaseStrategy, T
+from kelpickle.strategies.base_strategy import JsonStrategy
 
 if TYPE_CHECKING:
     from kelpickle.pickler import Pickler
@@ -27,13 +27,13 @@ def restore_import_string(import_string: str, /) -> Importable:
     return current_object
 
 
-class ImportStrategy(BaseStrategy[Importable]):
+class ImportStrategy(JsonStrategy[Importable]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'import'
 
     @staticmethod
-    def flatten(instance: Importable, pickler: Pickler) -> Json:
+    def _flatten(instance: Importable, pickler: Pickler) -> Json:
         return {'import_string': get_import_string(instance)}
 
     @staticmethod

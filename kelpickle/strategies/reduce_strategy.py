@@ -5,7 +5,7 @@ from pickle import DEFAULT_PROTOCOL
 from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias
 
 from kelpickle.common import Json, JsonList
-from kelpickle.strategies.base_strategy import BaseStrategy, T
+from kelpickle.strategies.base_strategy import JsonStrategy
 from kelpickle.strategies.state_strategy import set_state, InstanceState
 from kelpickle.strategies.import_strategy import restore_import_string
 
@@ -118,13 +118,13 @@ def build_from_reduce(reduce_result: ObjectBuildInstructions) -> Any:
     return instance
 
 
-class ReduceStrategy(BaseStrategy[Any]):
+class ReduceStrategy(JsonStrategy[Any]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'reduce'
 
     @staticmethod
-    def flatten(instance: Any, pickler: Pickler) -> Json:
+    def _flatten(instance: Any, pickler: Pickler) -> Json:
         reduce_result = reduce(instance)
         if isinstance(reduce_result, str):
             # The result is an import string that's missing the module part.
