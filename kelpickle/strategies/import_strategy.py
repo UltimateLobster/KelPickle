@@ -1,14 +1,24 @@
 from __future__ import annotations
 
-from types import FunctionType, ModuleType
-from typing import TYPE_CHECKING, Any, Type, TypeAlias
+from types import (
+    ModuleType,
+    FunctionType,
+    BuiltinFunctionType,
+    BuiltinMethodType,
+    WrapperDescriptorType,
+    MethodWrapperType,
+    MethodDescriptorType,
+    ClassMethodDescriptorType,
+    GetSetDescriptorType,
+    MemberDescriptorType
+)
+from typing import TYPE_CHECKING, Any, Type, TypeAlias, Iterable
 
 from kelpickle.common import Json
-from kelpickle.strategies.base_strategy import JsonStrategy
+from kelpickle.strategies.base_strategy import BaseStrategy
 
 if TYPE_CHECKING:
-    from kelpickle.pickler import Pickler
-    from kelpickle.unpickler import Unpickler
+    from kelpickle.kelpickling import Pickler, Unpickler
 
 
 Importable: TypeAlias = Type[Any] | FunctionType | ModuleType
@@ -27,15 +37,31 @@ def restore_import_string(import_string: str, /) -> Importable:
     return current_object
 
 
-class ImportStrategy(JsonStrategy[Importable]):
+class ImportStrategy(BaseStrategy[Importable]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'import'
 
     @staticmethod
-    def _flatten(instance: Importable, pickler: Pickler) -> Json:
+    def get_supported_types() -> Iterable[type]:
+        return [
+            type,
+            ModuleType,
+            FunctionType,
+            BuiltinFunctionType,
+            BuiltinMethodType,
+            WrapperDescriptorType,
+            MethodWrapperType,
+            MethodDescriptorType,
+            ClassMethodDescriptorType,
+            GetSetDescriptorType,
+            MemberDescriptorType
+        ]
+
+    @staticmethod
+    def simplify(instance: Importable, pickler: Pickler) -> Json:
         return {'import_string': get_import_string(instance)}
 
     @staticmethod
-    def restore(jsonified_object: Json, unpickler: Unpickler) -> Importable:
-        return restore_import_string(jsonified_object['import_string'])
+    def restore(simplified_object: Json, unpickler: Unpickler) -> Importable:
+        return restore_import_string(simplified_object['import_string'])

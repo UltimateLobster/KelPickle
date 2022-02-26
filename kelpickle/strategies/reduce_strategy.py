@@ -5,13 +5,12 @@ from pickle import DEFAULT_PROTOCOL
 from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias
 
 from kelpickle.common import Json, JsonList
-from kelpickle.strategies.base_strategy import JsonStrategy
+from kelpickle.strategies.base_strategy import BaseStrategy
 from kelpickle.strategies.state_strategy import set_state, InstanceState
 from kelpickle.strategies.import_strategy import restore_import_string
 
 if TYPE_CHECKING:
-    from kelpickle.pickler import Pickler
-    from kelpickle.unpickler import Unpickler
+    from kelpickle.kelpickling import Pickler, Unpickler
 
 
 # __reduce__ functions may return these objects which can be used to rebuild the original object
@@ -118,13 +117,17 @@ def build_from_reduce(reduce_result: ObjectBuildInstructions) -> Any:
     return instance
 
 
-class ReduceStrategy(JsonStrategy[Any]):
+class ReduceStrategy(BaseStrategy[Any]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'reduce'
 
     @staticmethod
-    def _flatten(instance: Any, pickler: Pickler) -> Json:
+    def get_supported_types() -> Iterable[type]:
+        return [object]
+
+    @staticmethod
+    def simplify(instance: Any, pickler: Pickler) -> Json:
         reduce_result = reduce(instance)
         if isinstance(reduce_result, str):
             # The result is an import string that's missing the module part.
@@ -135,15 +138,15 @@ class ReduceStrategy(JsonStrategy[Any]):
 
             return {'value': f"{containing_module}/{reduce_result}"}
 
-        jsonified_result = [pickler.flatten(x) for x in reduce_result]
+        jsonified_result = [pickler.simplify(x) for x in reduce_result]
         none_padding: JsonList = [None] * (6 - len(jsonified_result))
         jsonified_result.extend(none_padding)
 
         return {'value': jsonified_result}
 
     @staticmethod
-    def restore(jsonified_object: Json, unpickler: Unpickler) -> Any:
-        flattened_reduce = jsonified_object['value']
+    def restore(simplified_object: Json, unpickler: Unpickler) -> Any:
+        flattened_reduce = simplified_object['value']
         if isinstance(flattened_reduce, str):
             return restore_import_string(flattened_reduce)
 

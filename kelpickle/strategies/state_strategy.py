@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias, Callable, Type
+from typing import TYPE_CHECKING, Any, TypeAlias, Callable, Type, Iterable
 
 from kelpickle.common import Json
-from kelpickle.strategies.base_strategy import JsonStrategy
+from kelpickle.strategies.base_strategy import BaseStrategy
 from kelpickle.strategies.import_strategy import restore_import_string, get_import_string
 
-
 if TYPE_CHECKING:
-    from kelpickle.pickler import Pickler
-    from kelpickle.unpickler import Unpickler
+    from kelpickle.kelpickling import Pickler, Unpickler
 
 
 InstanceState: TypeAlias = dict[str, Any] | tuple[dict[str, Any], dict[str, Any]]
@@ -97,27 +95,31 @@ def set_state(instance: Any, state: InstanceState) -> None:
         instance_set_state(state)
 
 
-class StateStrategy(JsonStrategy[Any]):
+class StateStrategy(BaseStrategy[Any]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'state'
 
     @staticmethod
-    def _flatten(instance: Any, pickler: Pickler) -> Json:
+    def get_supported_types() -> Iterable[type]:
+        return []
+
+    @staticmethod
+    def simplify(instance: Any, pickler: Pickler) -> Json:
         instance_state = get_state(instance)
 
         return {
             'type': get_import_string(instance.__class__),
-            'state': pickler.flatten(instance_state)
+            'state': pickler.simplify(instance_state)
         }
 
     @staticmethod
-    def restore(jsonified_object: Json, unpickler: Unpickler) -> Any:
-        flattened_instance_type = jsonified_object['type']
+    def restore(simplified_object: Json, unpickler: Unpickler) -> Any:
+        flattened_instance_type = simplified_object['type']
         instance_type: Type[Any] = restore_import_string(flattened_instance_type)
         instance = object.__new__(instance_type)
 
-        instance_state = unpickler.restore(jsonified_object['state'])
+        instance_state = unpickler.restore(simplified_object['state'])
         set_state(instance, instance_state)
 
         return instance

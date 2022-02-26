@@ -2,8 +2,7 @@ from __future__ import annotations
 import pytest
 from dataclasses import dataclass
 
-from kelpickle.pickler import Pickler
-from kelpickle.unpickler import Unpickler
+from kelpickle.kelpickling import Pickler, Unpickler
 
 
 @dataclass
@@ -44,6 +43,7 @@ def custom_function():
         1000000000000000000000,
         'some_string',
         'עברית',
+        b'\x00\x01\x02',
         [1, 2, 3],
         (1, 2, 3),
         {1, 2, 3},
