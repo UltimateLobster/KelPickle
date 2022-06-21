@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from types import NoneType
-from typing import TypeVar, TypeAlias, Any
+from typing import TypeVar, TypeAlias, Any, NamedTuple, Type
+from collections import namedtuple
 
 # Obviously this is not the correct way to type these. Unfortunately the recursive nature of JSON prevents us to do it.
 # This will hopefully be supported in the future which will let us change this correctly
@@ -14,3 +15,9 @@ StateType = TypeVar('StateType')
 
 
 NATIVE_TYPES = (int, float, bool, str, NoneType)
+
+
+class SimplifiedObject(NamedTuple):
+    strategy_name: str
+    simplified_instance: Jsonable
+
