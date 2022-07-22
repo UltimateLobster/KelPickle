@@ -45,7 +45,7 @@ class BaseStrategy(Generic[_OriginalType, _ReducedInstanceType], metaclass=ABCMe
             unpickler: Unpickler
     ) -> _OriginalType:
         """
-        Restore an instance that was reduced using the pyreduce method.
+        Restore an instance that was reduced using the use_python_reduce method.
         """
         raise NotImplementedError()
 

@@ -1,22 +1,18 @@
 from __future__ import annotations
 
 import json
+from pickle import DEFAULT_PROTOCOL
 
 from typing import Type, Any, Callable, Optional
+
+from kelpickle import DefaultStrategy
 from kelpickle.common import NATIVE_TYPES, KELP_STRATEGY_KEY
 from kelpickle.strategy.base_strategy import BaseStrategy, ReductionResult, JsonicReductionResult, \
     BaseNonNativeJsonStrategy
-from kelpickle.strategy.state_strategy import StateStrategy
-from kelpickle.strategy.pyreduce_strategy import PyReduceStrategy
 from kelpickle.strategy.null_strategy import NullStrategy
 from kelpickle.strategy.list_strategy import ListStrategy
 from kelpickle.strategy.dict_strategy import DictStrategy
 from kelpickle.strategy_manager import get_strategy_by_name, get_strategy_by_type
-
-
-DEFAULT_REDUCE = object.__reduce__
-DEFAULT_REDUCE_EX = object.__reduce_ex__
-STRATEGY_KEY = 'py/strategy'
 
 
 class PicklingError(Exception):
@@ -41,6 +37,8 @@ class UnsupportedStrategy(UnpicklingError):
 
 
 class Pickler:
+    PICKLE_PROTOCOL = DEFAULT_PROTOCOL
+
     def pickle(self, instance: Any) -> str:
         """
         serialize the given python object.
@@ -53,13 +51,13 @@ class Pickler:
     def reduce(self, instance: Any) -> ReductionResult:
         """
         Reduce the given instance to a simplified representation of the steps to rebuild it.
-        :param instance: The instance to pyreduce
+        :param instance: The instance to use_python_reduce
         :return: The reduced instance
         """
         instance_type = instance.__class__
         strategy = get_strategy_by_type(instance_type)
         if strategy is None:
-            return Pickler.default_reduce(instance, self)
+            strategy = DefaultStrategy
 
         return self.reduce_by_strategy(instance, strategy)
 
@@ -73,7 +71,7 @@ class Pickler:
         """
         Reduce an instance using the specific strategy.
 
-        :param instance: The instance to pyreduce
+        :param instance: The instance to use_python_reduce
         :param strategy: The strategy to use (assumed to be fitting to the given instance already)
         :return: The reduced instance
         """
@@ -82,29 +80,6 @@ class Pickler:
         else:
             return strategy.reduce(instance, self)
 
-    @staticmethod
-    def default_reduce(instance: Any, pickler: Pickler) -> ReductionResult:
-        """
-        The default pyreduce method that is used if no strategy is found for the type of the instance.
-
-        # TODO: Convert to Cython.
-        Notice this function is static method even though it receives a Pickler instance. This is done because in the
-        future I'm planning to convert the code to use Cython which will c implemented classes to have static methods
-        if they are to be accessed dynamically.
-
-        :param instance: The instance to pyreduce
-        :param pickler: The pickler that is used to pyreduce the instance
-        :return: The reduced object
-        """
-        instance_type = instance.__class__
-        if instance_type.__reduce_ex__ == DEFAULT_REDUCE_EX and instance_type.__reduce__ == DEFAULT_REDUCE:
-            # We have no custom implementation of __reduce__/__reduce_ex__. We may use the state shortcut instead.
-            strategy = StateStrategy
-        else:
-            strategy = PyReduceStrategy
-
-        return pickler.reduce_by_strategy(instance, strategy)
-
 
 def restore_by_strategy_value(reduced_instance: JsonicReductionResult, unpickler: Unpickler) -> Any:
     """
@@ -112,7 +87,7 @@ def restore_by_strategy_value(reduced_instance: JsonicReductionResult, unpickler
 
     :param reduced_instance: The reduced object to restore
     :param unpickler: The unpickler to be used for any inner members that should be restored as well.
-    :return: The original object as was originally passed to Pickler's "pyreduce" function
+    :return: The original object as was originally passed to Pickler's "use_python_reduce" function
     """
 
     strategy_name: Optional[str] = reduced_instance.get(KELP_STRATEGY_KEY, DictStrategy.get_strategy_name())

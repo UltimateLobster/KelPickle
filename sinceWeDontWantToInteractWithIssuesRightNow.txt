@@ -1,15 +1,15 @@
 Implement with github issues.
 
 Features:
-    shortcut for __newobj__ and __newobj_ex__ for pyreduce
-    support for string pyreduce
+    shortcut for __newobj__ and __newobj_ex__ for use_python_reduce - V
+    support for string use_python_reduce - V
     Dicts with saved words
     Unrestorable objects
     Reference management
     Proxies
     Cython
     Complex keys
-    bytes support
+    bytes support - V
     datetime support
     timezone support
     metadata and pickling flags
@@ -18,7 +18,7 @@ Features:
 
 Tests:
     tests with github action
-    implement tests with tox
+    implement tests with tox - V
     Cross-interpreter tests
     Fuzz testing
     Regression tests

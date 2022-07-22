@@ -6,7 +6,6 @@ from types import (
     BuiltinFunctionType,
     BuiltinMethodType,
     WrapperDescriptorType,
-    MethodWrapperType,
     MethodDescriptorType,
     ClassMethodDescriptorType,
     GetSetDescriptorType,
@@ -24,7 +23,8 @@ Importable: TypeAlias = Type[Any] | FunctionType | ModuleType
 
 
 def get_import_string(instance: Importable) -> str:
-    return f'{instance.__module__}/{instance.__qualname__}'
+    instance_module = getattr(instance, "__module__", "builtins") or "builtins"
+    return f'{instance_module}/{instance.__qualname__}'
 
 
 def restore_import_string(import_string: str, /) -> Importable:
@@ -54,7 +54,6 @@ class ImportStrategy(BaseNonNativeJsonStrategy[Importable, ImportReductionResult
             BuiltinFunctionType,
             BuiltinMethodType,
             WrapperDescriptorType,
-            MethodWrapperType,
             MethodDescriptorType,
             ClassMethodDescriptorType,
             GetSetDescriptorType,
