@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, TypeVar, Generic
 from kelpickle.common import JsonNative, NATIVE_TYPES
-from kelpickle.strategies.base_strategy import BaseStrategy
+from kelpickle.strategy.base_strategy import BaseStrategy
 
 if TYPE_CHECKING:
     from kelpickle.kelpickling import Pickler, Unpickler
 
 
-class NullStrategy(BaseStrategy[JsonNative]):
+Native = TypeVar("Native", bound=JsonNative)
+
+
+class NullStrategy(Generic[Native], BaseStrategy[Native, Native]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'null'
@@ -18,9 +21,9 @@ class NullStrategy(BaseStrategy[JsonNative]):
         return NATIVE_TYPES
 
     @staticmethod
-    def simplify(instance: JsonNative, pickler: Pickler) -> JsonNative:
+    def reduce(instance: Native, pickler: Pickler) -> Native:
         return instance
 
     @staticmethod
-    def restore(simplified_object: JsonNative, unpickler: Unpickler) -> JsonNative:
-        return simplified_object
+    def restore(reduced_object: Native, unpickler: Unpickler) -> Native:
+        return reduced_object

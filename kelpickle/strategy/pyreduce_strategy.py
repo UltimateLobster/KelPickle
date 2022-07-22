@@ -4,17 +4,16 @@ import sys
 from pickle import DEFAULT_PROTOCOL
 from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias
 
-from kelpickle.common import Json, JsonList
-from kelpickle.strategies.base_strategy import BaseStrategy
-from kelpickle.strategies.state_strategy import set_state, InstanceState
-from kelpickle.strategies.import_strategy import restore_import_string
+from kelpickle.common import JsonList
+from kelpickle.strategy.base_strategy import BaseNonNativeJsonStrategy, JsonicReductionResult
+from kelpickle.strategy.state_strategy import set_state, InstanceState
+from kelpickle.strategy.import_strategy import restore_import_string
 
 if TYPE_CHECKING:
     from kelpickle.kelpickling import Pickler, Unpickler
 
 
-# __reduce__ functions may return these objects which can be used to rebuild the original object
-ObjectBuildInstructions: TypeAlias = tuple[
+PyReduceBuildInstructions: TypeAlias = tuple[
     Callable,
     Iterable,
     Optional[InstanceState | Any],
@@ -22,15 +21,16 @@ ObjectBuildInstructions: TypeAlias = tuple[
     Optional[Iterable[tuple[str, Any]]],
     Optional[Callable[[Any, InstanceState], None]]
 ]
+ImportString: TypeAlias = str
 
-ReduceResult: TypeAlias = str | ObjectBuildInstructions
+PyReduceResult: TypeAlias = ImportString | PyReduceBuildInstructions
 
 
 class UnreducableObject(ValueError):
     pass
 
 
-class ReduceError(ValueError):
+class PyReduceError(ValueError):
     pass
 
 
@@ -60,30 +60,30 @@ def get_containing_module(import_string: str) -> Optional[str]:
     return None
 
 
-def reduce(instance: Any) -> ReduceResult:
-    reduce_func: Callable[[int], ReduceResult]
+def pyreduce(instance: Any) -> PyReduceResult:
+    reduce_func: Callable[[int], PyReduceResult]
     if reduce_func := getattr(instance, "__reduce_ex__", None):
         return reduce_func(DEFAULT_PROTOCOL)
 
-    reduce_ex_func: Callable[..., ReduceResult]
+    reduce_ex_func: Callable[..., PyReduceResult]
     if reduce_ex_func := getattr(instance, "__reduce__", None):
         return reduce_ex_func()
 
-    raise UnreducableObject(f'Instance of type {type(instance)} cannot be pickled. It does not implement the reduce '
+    raise UnreducableObject(f'Instance of type {type(instance)} cannot be pickled. It does not implement the pyreduce '
                             f'protocol.', instance)
 
 
-def build_from_reduce(reduce_result: ObjectBuildInstructions) -> Any:
+def build_from_pyreduce(reduce_result: PyReduceBuildInstructions) -> Any:
     """
     Build an instance from the non-str result of a previously called __reduce__/__reduce_ex__.
 
-    Explanation about reduce:
+    Explanation about python's reduce:
        # TODO: Add explanation here.
 
     :param reduce_result: The result of __reduce__/__reduce_ex__
     :return: The newly created instance.
     """
-    # TODO: Add support for string reduce results
+    # TODO: Add support for string pyreduce results
     callable_, args, state, list_items, dict_items, custom_set_state = reduce_result
 
     # Step 1: Create the instance
@@ -117,7 +117,11 @@ def build_from_reduce(reduce_result: ObjectBuildInstructions) -> Any:
     return instance
 
 
-class ReduceStrategy(BaseStrategy[Any]):
+class PyReduceReductionResult(JsonicReductionResult):
+    value: JsonList | ImportString
+
+
+class PyReduceStrategy(BaseNonNativeJsonStrategy[Any, PyReduceReductionResult]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'reduce'
@@ -127,29 +131,29 @@ class ReduceStrategy(BaseStrategy[Any]):
         return [object]
 
     @staticmethod
-    def simplify(instance: Any, pickler: Pickler) -> Json:
-        reduce_result = reduce(instance)
+    def reduce(instance: Any, pickler: Pickler) -> PyReduceReductionResult:
+        reduce_result = pyreduce(instance)
         if isinstance(reduce_result, str):
             # The result is an import string that's missing the module part.
             containing_module = get_containing_module(reduce_result)
             if containing_module is None:
-                raise ReduceError(f"Could not pickle object of type {type(instance)} with reduce result {reduce_result}"
+                raise PyReduceError(f"Could not pickle object of type {type(instance)} with pyreduce result {reduce_result}"
                                   f", it is not importable from any module.")
 
             return {'value': f"{containing_module}/{reduce_result}"}
 
-        jsonified_result = [pickler.simplify(x) for x in reduce_result]
+        jsonified_result = [pickler.reduce(x) for x in reduce_result]
         none_padding: JsonList = [None] * (6 - len(jsonified_result))
         jsonified_result.extend(none_padding)
 
         return {'value': jsonified_result}
 
     @staticmethod
-    def restore(simplified_object: Json, unpickler: Unpickler) -> Any:
-        flattened_reduce = simplified_object['value']
+    def restore(reduced_object: PyReduceReductionResult, unpickler: Unpickler) -> Any:
+        flattened_reduce = reduced_object['value']
         if isinstance(flattened_reduce, str):
             return restore_import_string(flattened_reduce)
 
         # TODO: type this in a better way
-        reduce_result: ObjectBuildInstructions = tuple(unpickler.restore(member) for member in flattened_reduce)  # type: ignore
-        return build_from_reduce(reduce_result)
+        reduce_result: PyReduceBuildInstructions = tuple(unpickler.restore(member) for member in flattened_reduce)  # type: ignore
+        return build_from_pyreduce(reduce_result)

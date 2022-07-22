@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Type, Optional
 
-from kelpickle.strategies.base_strategy import BaseStrategy
+from kelpickle.strategy.base_strategy import BaseStrategy
 
 
 class StrategyConflictError(ValueError):

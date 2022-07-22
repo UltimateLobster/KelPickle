@@ -12,10 +12,9 @@ from types import (
     GetSetDescriptorType,
     MemberDescriptorType
 )
-from typing import TYPE_CHECKING, Any, Type, TypeAlias, Iterable
+from typing import TYPE_CHECKING, Any, Type, TypeAlias, Iterable, TypedDict
 
-from kelpickle.common import Json
-from kelpickle.strategies.base_strategy import BaseStrategy
+from kelpickle.strategy.base_strategy import BaseNonNativeJsonStrategy, JsonicReductionResult
 
 if TYPE_CHECKING:
     from kelpickle.kelpickling import Pickler, Unpickler
@@ -37,7 +36,11 @@ def restore_import_string(import_string: str, /) -> Importable:
     return current_object
 
 
-class ImportStrategy(BaseStrategy[Importable]):
+class ImportReductionResult(JsonicReductionResult):
+    import_string: str
+
+
+class ImportStrategy(BaseNonNativeJsonStrategy[Importable, ImportReductionResult]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'import'
@@ -59,9 +62,9 @@ class ImportStrategy(BaseStrategy[Importable]):
         ]
 
     @staticmethod
-    def simplify(instance: Importable, pickler: Pickler) -> Json:
+    def reduce(instance: Importable, pickler: Pickler) -> ImportReductionResult:
         return {'import_string': get_import_string(instance)}
 
     @staticmethod
-    def restore(simplified_object: Json, unpickler: Unpickler) -> Importable:
-        return restore_import_string(simplified_object['import_string'])
+    def restore(reduced_object: ImportReductionResult, unpickler: Unpickler) -> Importable:
+        return restore_import_string(reduced_object['import_string'])

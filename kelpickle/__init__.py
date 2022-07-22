@@ -1,22 +1,22 @@
 from kelpickle.strategy_manager import register_strategy
 
-from kelpickle.strategies.bytes_strategy import BytesStrategy
-from kelpickle.strategies.dict_strategy import DictStrategy
-from kelpickle.strategies.import_strategy import ImportStrategy
-from kelpickle.strategies.list_strategy import ListStrategy
-from kelpickle.strategies.null_strategy import NullStrategy
-from kelpickle.strategies.reduce_strategy import ReduceStrategy
-from kelpickle.strategies.set_strategy import SetStrategy
-from kelpickle.strategies.state_strategy import StateStrategy
-from kelpickle.strategies.tuple_strategy import TupleStrategy
-from kelpickle.strategies.tzinfo_strategy import TzInfoStrategy
+from kelpickle.strategy.bytes_strategy import BytesStrategy
+from kelpickle.strategy.dict_strategy import DictStrategy
+from kelpickle.strategy.import_strategy import ImportStrategy
+from kelpickle.strategy.list_strategy import ListStrategy
+from kelpickle.strategy.null_strategy import NullStrategy
+from kelpickle.strategy.pyreduce_strategy import PyReduceStrategy
+from kelpickle.strategy.set_strategy import SetStrategy
+from kelpickle.strategy.state_strategy import StateStrategy
+from kelpickle.strategy.tuple_strategy import TupleStrategy
+from kelpickle.strategy.tzinfo_strategy import TzInfoStrategy
 
 register_strategy(BytesStrategy)
 register_strategy(DictStrategy)
 register_strategy(ImportStrategy)
 register_strategy(ListStrategy)
 register_strategy(NullStrategy)
-register_strategy(ReduceStrategy)
+register_strategy(PyReduceStrategy)
 register_strategy(SetStrategy)
 register_strategy(StateStrategy)
 register_strategy(TupleStrategy)

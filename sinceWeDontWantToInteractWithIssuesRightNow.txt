@@ -1,8 +1,8 @@
 Implement with github issues.
 
 Features:
-    shortcut for __newobj__ and __newobj_ex__ for reduce
-    support for string reduce
+    shortcut for __newobj__ and __newobj_ex__ for pyreduce
+    support for string pyreduce
     Dicts with saved words
     Unrestorable objects
     Reference management

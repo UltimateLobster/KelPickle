@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypeAlias, Callable, Type, Iterable
 
-from kelpickle.common import Json
-from kelpickle.strategies.base_strategy import BaseStrategy
-from kelpickle.strategies.import_strategy import restore_import_string, get_import_string
+from kelpickle.strategy.base_strategy import BaseNonNativeJsonStrategy, JsonicReductionResult, ReductionResult
+from kelpickle.strategy.import_strategy import restore_import_string, get_import_string
 
 if TYPE_CHECKING:
     from kelpickle.kelpickling import Pickler, Unpickler
 
 
 InstanceState: TypeAlias = dict[str, Any] | tuple[dict[str, Any], dict[str, Any]]
+ImportString: TypeAlias = str
 
 
 class SetStateError(ValueError):
@@ -95,7 +95,12 @@ def set_state(instance: Any, state: InstanceState) -> None:
         instance_set_state(state)
 
 
-class StateStrategy(BaseStrategy[Any]):
+class StateReductionResult(JsonicReductionResult):
+    type: ImportString
+    state: ReductionResult
+
+
+class StateStrategy(BaseNonNativeJsonStrategy[Any, StateReductionResult]):
     @staticmethod
     def get_strategy_name() -> str:
         return 'state'
@@ -105,21 +110,21 @@ class StateStrategy(BaseStrategy[Any]):
         return []
 
     @staticmethod
-    def simplify(instance: Any, pickler: Pickler) -> Json:
+    def reduce(instance: Any, pickler: Pickler) -> StateReductionResult:
         instance_state = get_state(instance)
 
         return {
             'type': get_import_string(instance.__class__),
-            'state': pickler.simplify(instance_state)
+            'state': pickler.reduce(instance_state)
         }
 
     @staticmethod
-    def restore(simplified_object: Json, unpickler: Unpickler) -> Any:
-        flattened_instance_type = simplified_object['type']
+    def restore(reduced_object: StateReductionResult, unpickler: Unpickler) -> Any:
+        flattened_instance_type = reduced_object['type']
         instance_type: Type[Any] = restore_import_string(flattened_instance_type)
         instance = object.__new__(instance_type)
 
-        instance_state = unpickler.restore(simplified_object['state'])
+        instance_state = unpickler.restore(reduced_object['state'])
         set_state(instance, instance_state)
 
         return instance
