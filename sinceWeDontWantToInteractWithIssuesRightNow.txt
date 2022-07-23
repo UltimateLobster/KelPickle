@@ -13,6 +13,7 @@ Features:
     bytes support - V
     datetime support - V
     timezone support - V
+    timezone offset backup support (?)
     metadata and pickling flags
     auto deployment with github actions
     make this an actual library (.pyproject.toml)
