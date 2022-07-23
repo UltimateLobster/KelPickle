@@ -57,9 +57,19 @@ class Pickler:
         instance_type = instance.__class__
         strategy = get_strategy_by_type(instance_type)
         if strategy is None:
-            strategy = DefaultStrategy
+            return self.default_reduce(instance)
 
         return self.reduce_by_strategy(instance, strategy)
+
+    def default_reduce(self, instance: Any) -> ReductionResult:
+        """
+        Reduce an instance using the default strategy. This function is encouraged to be used by strategies that wish to
+        "extend" the default strategy.
+
+        :param instance: The instance to use_python_reduce
+        :return: The reduced instance
+        """
+        return self.reduce_by_strategy(instance, DefaultStrategy)
 
     def reduce_by_non_native_json_strategy(self, instance: Any, strategy: Type[BaseNonNativeJsonStrategy]) -> JsonicReductionResult:
         reduced_instance = strategy.reduce(instance, self)

@@ -3,6 +3,7 @@ Implement with github issues.
 Features:
     shortcut for __newobj__ and __newobj_ex__ for use_python_reduce - V
     support for string use_python_reduce - V
+    support strategies that work on subclasses
     Dicts with saved words
     Unrestorable objects
     Reference management
@@ -10,8 +11,8 @@ Features:
     Cython
     Complex keys
     bytes support - V
-    datetime support
-    timezone support
+    datetime support - V
+    timezone support - V
     metadata and pickling flags
     auto deployment with github actions
     make this an actual library (.pyproject.toml)

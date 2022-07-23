@@ -9,6 +9,10 @@ from kelpickle.strategy.null_strategy import NullStrategy
 from kelpickle.strategy.set_strategy import SetStrategy
 from kelpickle.strategy.tuple_strategy import TupleStrategy
 from kelpickle.strategy.tzinfo_strategy import TzInfoStrategy
+from kelpickle.strategy.datetime_strategy import DatetimeStrategy
+from kelpickle.strategy.date_strategy import DateStrategy
+from kelpickle.strategy.time_strategy import TimeStrategy
+from kelpickle.strategy.timedelta_strategy import TimedeltaStrategy
 
 register_strategy(DefaultStrategy)
 register_strategy(BytesStrategy)
@@ -19,3 +23,7 @@ register_strategy(NullStrategy)
 register_strategy(SetStrategy)
 register_strategy(TupleStrategy)
 register_strategy(TzInfoStrategy)
+register_strategy(DatetimeStrategy)
+register_strategy(DateStrategy)
+register_strategy(TimeStrategy)
+register_strategy(TimedeltaStrategy)

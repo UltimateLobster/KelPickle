@@ -1,14 +1,35 @@
 from __future__ import annotations
 
 import math
-from types import MethodType
-
 import pytest
 
+from types import MethodType
 from typing import Iterable, Any, Callable, Optional
-from dataclasses import dataclass
 
-from kelpickle.kelpickling import Pickler, Unpickler, PicklingError
+from dataclasses import dataclass
+from datetime import date, time, datetime, timedelta, timezone, tzinfo
+
+from kelpickle.kelpickling import Pickler, Unpickler
+
+
+class CustomTzInfo(tzinfo):
+    def __init__(self, offset: timedelta):
+        self.offset = offset
+
+    def __getinitargs__(self):
+        return self.offset,
+
+    def utcoffset(self, dt: datetime) -> timedelta:
+        return self.offset
+
+    def tzname(self, dt: datetime) -> str:
+        return "CustomTzInfo"
+
+    def dst(self, dt: datetime) -> timedelta:
+        return timedelta(0)
+
+    def __eq__(self, other):
+        return type(self) == type(other) and self.offset == other.offset
 
 
 @dataclass
@@ -110,6 +131,15 @@ def create_sanity_test_params() -> Iterable[SanityTestParams]:
         SanityTestParams("tuple", (1, 2, 3)),
         SanityTestParams("set", {1, 2, 3}),
         SanityTestParams("dict", {'a': 2}),
+        SanityTestParams("date", date(2020, 1, 1)),
+        SanityTestParams("time", time(10, 0, 0, 0)),
+        SanityTestParams("tz aware time", time(10, 0, 0, 0, tzinfo=CustomTzInfo(timedelta(hours=1)))),
+        SanityTestParams("datetime", datetime(2020, 1, 1, 10, 0, 0, 0)),
+        SanityTestParams("utc tzinfo", timezone.utc),
+        SanityTestParams("custom tzinfo", CustomTzInfo(timedelta(hours=1))),
+        SanityTestParams("tz aware datetime", datetime(2020, 1, 1, 10, 0, 0, 0, timezone.utc)),
+        SanityTestParams("custom tzinfo datetime", datetime(2020, 1, 1, 10, 0, 0, 0, CustomTzInfo(timedelta(hours=1)))),
+        SanityTestParams("custom object", CustomObject(1)),
         SanityTestParams("function", custom_function),
         SanityTestParams("method of simple instance", CustomObject(3).custom_method, method_sanity_test),
         SanityTestParams("method of simple class", CustomObject.custom_method),

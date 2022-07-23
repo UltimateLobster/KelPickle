@@ -28,9 +28,11 @@ class TzInfoStrategy(BaseNonNativeJsonStrategy[tzinfo, TzInfoStrategyResult]):
     def reduce(instance: tzinfo, pickler: Pickler) -> TzInfoStrategyResult:
         return {
             'offset': instance.utcoffset(_some_datetime).total_seconds(),
-            'tzinfo': pickler.default_reduce(instance, pickler)
+            'tzinfo': pickler.default_reduce(instance)
         }
 
     @staticmethod
     def restore(reduced_object: TzInfoStrategyResult, unpickler: Unpickler) -> tzinfo:
-        return unpickler.restore(reduced_object)
+        restored_tzinfo = unpickler.restore(reduced_object['tzinfo'])
+
+        return restored_tzinfo
