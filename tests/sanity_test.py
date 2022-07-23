@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import math
+from types import MethodType
+
 import pytest
 
 from typing import Iterable, Any, Callable, Optional
 from dataclasses import dataclass
 
-from kelpickle.kelpickling import Pickler, Unpickler
+from kelpickle.kelpickling import Pickler, Unpickler, PicklingError
 
 
 @dataclass
@@ -14,6 +17,18 @@ class CustomObject:
 
     def custom_method(self):
         pass
+
+    @staticmethod
+    def custom_static_method():
+        return 1
+
+    @classmethod
+    def custom_class_method(cls):
+        return 1
+
+    @property
+    def custom_property(self):
+        return 1
 
 
 @dataclass(frozen=True)
@@ -54,19 +69,27 @@ def custom_function():
     pass
 
 
-def default_sanity_test(serialized, deserialized) -> bool:
-    return type(serialized) == type(deserialized) and serialized == deserialized
+def default_value_comparison(original_value, deserialized_value) -> bool:
+    return type(original_value) == type(deserialized_value) and original_value == deserialized_value
+
+
+def builtin_method_sanity_test(original_value, deserialized_value) -> bool:
+    return default_value_comparison(original_value.__self__, deserialized_value.__self__)
+
+
+def method_sanity_test(original_value: MethodType, deserialized_value: MethodType) -> bool:
+    return original_value.__func__ == deserialized_value.__func__ and builtin_method_sanity_test(original_value, deserialized_value)
 
 
 class SanityTestParams:
     def __init__(self,
                  test_name: str,
                  test_object: Any,
-                 should_pass_test: Optional[Callable[[Any, Any], bool]] = default_sanity_test
+                 value_comparison: Optional[Callable[[Any, Any], bool]] = default_value_comparison
                  ):
         self.test_name = test_name
         self.test_object = test_object
-        self.should_pass_test = should_pass_test
+        self.value_comparison = value_comparison
 
 
 def create_sanity_test_params() -> Iterable[SanityTestParams]:
@@ -78,7 +101,7 @@ def create_sanity_test_params() -> Iterable[SanityTestParams]:
         SanityTestParams("rounded float", 1.0),
         SanityTestParams("complex", 1 + 2j),
         SanityTestParams("infinite float", float('inf')),
-        SanityTestParams("nan", float('nan')),
+        SanityTestParams("nan", float('nan'), lambda x, y: math.isnan(x) and math.isnan(y)),
         SanityTestParams("big integer", 1000000000000000000000),
         SanityTestParams("string", "some_string"),
         SanityTestParams("unicode string", 'עברית'),
@@ -88,18 +111,25 @@ def create_sanity_test_params() -> Iterable[SanityTestParams]:
         SanityTestParams("set", {1, 2, 3}),
         SanityTestParams("dict", {'a': 2}),
         SanityTestParams("function", custom_function),
+        SanityTestParams("method of simple instance", CustomObject(3).custom_method, method_sanity_test),
+        SanityTestParams("method of simple class", CustomObject.custom_method),
+        SanityTestParams("class method of simple instance", CustomObject(3).custom_class_method, method_sanity_test),
+        SanityTestParams("class method of simple class", CustomObject.custom_class_method),
+        SanityTestParams("static method of simple instance", CustomObject(3).custom_static_method),
+        SanityTestParams("static method of simple class", CustomObject.custom_static_method),
+        SanityTestParams("method wrapper", CustomObject(3).__str__, builtin_method_sanity_test),
+        SanityTestParams("method wrapper descriptor", CustomObject.__str__),
         SanityTestParams("builtin function", sum),
-        SanityTestParams("iterator", iter([])),
-        SanityTestParams("wrapper descriptor", object.__init__),
-        SanityTestParams("method wrapper", object().__str__),
-        SanityTestParams("builtin method", [].append),
-        SanityTestParams("class method descriptor", dict.__dict__["fromkeys"]),
+        SanityTestParams("builtin method", [].append, builtin_method_sanity_test),
+        SanityTestParams("builtin method descriptor", list.append),
+        SanityTestParams("class method descriptor", dict.__dict__["fromkeys"], lambda x, y: pytest.skip(
+            "Class method descriptors (Or at least the one used in the types module) are not equal even after the "
+            "official pickling process.")),
+        SanityTestParams("iterator", iter([1, 2, 3]), lambda x, y: list(x) == list(y)),
         SanityTestParams("not implemented", NotImplemented),
         SanityTestParams("module", CustomObject.__module__),
         SanityTestParams("class", CustomObject),
-        SanityTestParams("method of simple class", CustomObject.custom_method),
         SanityTestParams("simple instance", CustomObject(3)),
-        SanityTestParams("method of simple instance", CustomObject(3).custom_method),
         SanityTestParams("frozen dataclass", FrozenDataClass(3)),
         SanityTestParams("instance with state", CustomStateObject(3)),
         SanityTestParams("instance with reduce", CustomReduceObject(3)),
@@ -109,20 +139,33 @@ def create_sanity_test_params() -> Iterable[SanityTestParams]:
 
 
 test_sanity_ids, test_sanity_objects, test_sanity_assertions = zip(*[
-    (params.test_name, params.test_object, params.should_pass_test)
+    (params.test_name, params.test_object, params.value_comparison)
     for params in create_sanity_test_params()]
 )
 
 
 @pytest.mark.parametrize(
-    ['value', 'assertions'],
+    ['value', 'value_comparison'],
     zip(test_sanity_objects, test_sanity_assertions),
     ids=test_sanity_ids
 )
-def test_sanity(value, assertions):
+def test_sanity(value, value_comparison):
     pickler = Pickler()
     unpickler = Unpickler()
     serialized_value = pickler.pickle(value)
     deserialized_value = unpickler.unpickle(serialized_value)
 
-    assertions(serialized_value, deserialized_value)
+    assert value_comparison(value, deserialized_value)
+
+
+@pytest.mark.parametrize(
+    ['value'],
+    [
+        (CustomObject.custom_property,)
+    ],
+    ids=["property"]
+)
+def test_pickling_error_for_unpickleable_objects(value):
+    pickler = Pickler()
+    with pytest.raises(TypeError):
+        pickler.pickle(value)

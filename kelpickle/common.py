@@ -17,3 +17,10 @@ StateType = TypeVar('StateType')
 
 NATIVE_TYPES = (int, float, bool, str, NoneType)
 KELP_STRATEGY_KEY: Literal["kelp/strategy"] = 'kelp/strategy'
+
+
+class PicklingError(Exception):
+    """
+    Error that occurs during the pickling process
+    """
+    pass

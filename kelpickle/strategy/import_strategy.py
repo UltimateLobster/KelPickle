@@ -51,11 +51,8 @@ class ImportStrategy(BaseNonNativeJsonStrategy[Importable, ImportReductionResult
             type,
             ModuleType,
             FunctionType,
-            BuiltinFunctionType,
-            BuiltinMethodType,
             WrapperDescriptorType,
             MethodDescriptorType,
-            ClassMethodDescriptorType,
             GetSetDescriptorType,
             MemberDescriptorType
         ]

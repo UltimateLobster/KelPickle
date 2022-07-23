@@ -3,8 +3,9 @@ from __future__ import annotations
 import sys
 from pickle import DEFAULT_PROTOCOL
 from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias, Type
+import copyreg
 
-from kelpickle.common import JsonList
+from kelpickle.common import JsonList, PicklingError
 from kelpickle.strategy.base_strategy import BaseNonNativeJsonStrategy, JsonicReductionResult, ReductionResult
 from kelpickle.strategy.import_strategy import restore_import_string, get_import_string
 
@@ -28,14 +29,6 @@ PyReduceBuildInstructions: TypeAlias = tuple[
 ]
 
 PyReduceResult: TypeAlias = ImportString | PyReduceBuildInstructions
-
-
-class UnreducableObject(ValueError):
-    pass
-
-
-class PyReduceError(ValueError):
-    pass
 
 
 def get_containing_module(import_string: str) -> Optional[str]:
@@ -64,107 +57,8 @@ def get_containing_module(import_string: str) -> Optional[str]:
     return None
 
 
-def use_python_reduce(instance: Any) -> PyReduceResult:
-    reduce_func: Callable[[int], PyReduceResult]
-    if reduce_func := getattr(instance, "__reduce_ex__", None):
-        return reduce_func(DEFAULT_PROTOCOL)
-
-    reduce_ex_func: Callable[..., PyReduceResult]
-    if reduce_ex_func := getattr(instance, "__reduce__", None):
-        return reduce_ex_func()
-
-    raise UnreducableObject(f'Instance of type {type(instance)} cannot be pickled. It does not implement the reduce '
-                            f'protocol.', instance)
-
-
-def build_from_pyreduce(reduce_result: PyReduceBuildInstructions) -> Any:
-    """
-    Build an instance from the non-str result of a previously called __reduce__/__reduce_ex__.
-
-    Explanation about python's reduce:
-       # TODO: Add explanation here.
-
-    :param reduce_result: The result of __reduce__/__reduce_ex__
-    :return: The newly created instance.
-    """
-    # TODO: Add support for string use_python_reduce results
-    callable_, args, state, list_items, dict_items, custom_set_state = reduce_result
-
-    # Step 1: Create the instance
-    instance = callable_(*args)
-
-    # Step 2: Add items
-    if list_items is not None:
-        try:
-            extend = instance.extend
-        except AttributeError:
-            # If object did not implement the 'extend' method, fallback on 'append' method.
-            append = instance.append
-            for item in list_items:
-                append(item)
-
-        else:
-            extend(list_items)
-
-    # Step 3: Set items
-    if dict_items is not None:
-        for key, value in dict_items:
-            instance[key] = value
-
-    # Step 4: Set the new state
-    if state is not None:
-        if custom_set_state:
-            custom_set_state(instance, state)
-        else:
-            set_state(instance, state)
-
-    return instance
-
-
 class SetStateError(ValueError):
     pass
-
-
-def _default_get_state(instance: Any) -> dict:
-    """
-    This is the default way to return an object's state if it didn't implement its own custom __getstate__.
-
-    By default, objects' state will be a mapping between a mapping between attribute names and values. Slotted
-    objects (instances of classes that implemented __slots__) will have an additional mapping specifically for the
-    slotted attributes. Such objects will have a tuple containing both of the mappings (A slotted object can have
-    __dict__ as one of the slotted attributes in which case it can have a combination of dynamic and static
-    namespace).
-
-    :param instance: The instance whose state shall be returned.
-    :return: The given instance's state.
-    """
-    # TODO: Add support for slotted instances.
-    return getattr(instance, "__dict__", None)
-
-
-def get_state(instance: Any) -> Any:
-    try:
-        custom_getstate: Callable[..., Any] = instance.__getstate__
-    except AttributeError:
-        # Instance does not implement __getstate__, so instead of calling it, we will call the default
-        # implementation
-        return _default_get_state(instance)
-    else:
-        return custom_getstate()
-
-
-def get_custom_newargs(instance: Any) -> tuple[Optional[tuple], Optional[dict]]:
-    try:
-        getnewargs_ex: Callable[[], tuple[tuple, dict]] = instance.__getnewargs_ex__
-    except AttributeError:
-        try:
-            getnewargs: Callable[[], tuple] = instance.__getnewargs__
-        except AttributeError:
-            return None, None
-        else:
-            return getnewargs(), None
-    else:
-        return getnewargs_ex()
 
 
 def _default_set_state(instance: Any, state: InstanceState) -> None:
@@ -217,6 +111,63 @@ def set_state(instance: Any, state: InstanceState) -> None:
         instance_set_state(state)
 
 
+def build_from_pyreduce(reduce_result: PyReduceBuildInstructions) -> Any:
+    """
+    Build an instance from the non-str result of a previously called __reduce__/__reduce_ex__.
+
+    Explanation about python's reduce:
+       # TODO: Add explanation here.
+
+    :param reduce_result: The result of __reduce__/__reduce_ex__
+    :return: The newly created instance.
+    """
+    # TODO: Add support for string use_python_reduce results
+    callable_, args, state, list_items, dict_items, custom_set_state = reduce_result
+
+    # Step 1: Create the instance
+    instance = callable_(*args)
+
+    # Step 2: Add items
+    if list_items is not None:
+        try:
+            extend = instance.extend
+        except AttributeError:
+            # If object did not implement the 'extend' method, fallback on 'append' method.
+            append = instance.append
+            for item in list_items:
+                append(item)
+
+        else:
+            extend(list_items)
+
+    # Step 3: Set items
+    if dict_items is not None:
+        for key, value in dict_items:
+            instance[key] = value
+
+    # Step 4: Set the new state
+    if state is not None:
+        if custom_set_state:
+            custom_set_state(instance, state)
+        else:
+            set_state(instance, state)
+
+    return instance
+
+
+def use_python_reduce(instance: Any) -> PyReduceResult:
+    reduce_func: Callable[[int], PyReduceResult]
+    if reduce_func := getattr(instance, "__reduce_ex__", None):
+        return reduce_func(DEFAULT_PROTOCOL)
+
+    reduce_ex_func: Callable[..., PyReduceResult]
+    if reduce_ex_func := getattr(instance, "__reduce__", None):
+        return reduce_ex_func()
+
+    raise PicklingError(f'Instance of type {type(instance)} cannot be pickled. It does not implement the reduce '
+                        f'protocol.', instance)
+
+
 class DefaultReductionResult(JsonicReductionResult):
     reduce: JsonList | ImportString
     type: ImportString
@@ -235,6 +186,7 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
     @staticmethod
     def reduce(instance: Any, pickler: Pickler) -> DefaultReductionResult:
         instance_type = instance.__class__
+        reduce_result = use_python_reduce(instance)
         if instance_type.__reduce_ex__ == DEFAULT_REDUCE_EX and instance_type.__reduce__ == DEFAULT_REDUCE:
             # We have no custom implementation of __reduce__/__reduce_ex__. We can use the prettier representation of
             # the object
@@ -242,27 +194,34 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
                 'type': get_import_string(instance.__class__),
             }
 
-            new_args, new_kwargs = get_custom_newargs(instance)
+            match reduce_result:
+                case copyreg.__newobj_ex__, (_, new_args, new_kwargs), *_:
+                    if new_args is not None:
+                        result["new_args"] = pickler.reduce(new_args)
 
-            if new_args is not None:
-                result["new_args"] = pickler.reduce(new_args)
+                    if new_kwargs is not None:
+                        result["new_kwargs"] = pickler.reduce(new_kwargs)
 
-            if new_kwargs is not None:
-                result["new_kwargs"] = pickler.reduce(new_kwargs)
+                case copyreg.__newobj__, (_, *new_args), *_:
+                    if new_args is not None:
+                        result["new_args"] = pickler.reduce(new_args)
 
-            instance_state = get_state(instance)
+                case _:
+                    raise PicklingError(f"Instance of type {instance_type} cannot be pickled. The default "
+                                        f"implementation of the reduce protocol yields an unsupported result.")
+
+            instance_state = reduce_result[2]
             if instance_state is not None:
                 result['state'] = pickler.reduce(instance_state)
 
             return result
 
-        reduce_result = use_python_reduce(instance)
         if isinstance(reduce_result, str):
             # The result is an import string that's missing the module part.
             containing_module = get_containing_module(reduce_result)
             if containing_module is None:
-                raise PyReduceError(f"Could not pickle object of type {type(instance)} with use_python_reduce result {reduce_result}"
-                                  f", it is not importable from any module.")
+                raise PicklingError(f"Could not pickle object of type {type(instance)} with use_python_reduce result "
+                                    f"{reduce_result}, it is not importable from any module.")
 
             return {'reduce': f"{containing_module}/{reduce_result}"}
 
