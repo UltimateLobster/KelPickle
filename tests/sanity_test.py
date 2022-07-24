@@ -211,6 +211,22 @@ def test_sanity(value, value_comparison):
     assert value_comparison(value, deserialized_value)
 
 
+def test_reference_caching():
+    pickler = Pickler()
+    unpickler = Unpickler()
+
+    value = []
+    value_appears_twice = {
+        'value': value,
+        'value_again': value
+    }
+
+    serialized = pickler.pickle(value_appears_twice)
+    deserialized = unpickler.unpickle(serialized)
+
+    assert deserialized['value'] is deserialized['value_again']
+
+
 @pytest.mark.parametrize(
     ['value'],
     [

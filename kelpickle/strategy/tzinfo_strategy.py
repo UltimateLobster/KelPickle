@@ -33,6 +33,6 @@ class TzInfoStrategy(BaseNonNativeJsonStrategy[tzinfo, TzInfoStrategyResult]):
 
     @staticmethod
     def restore(reduced_object: TzInfoStrategyResult, unpickler: Unpickler) -> tzinfo:
-        restored_tzinfo = unpickler.restore(reduced_object['tzinfo'])
+        restored_tzinfo = unpickler.default_restore(reduced_object['tzinfo'])
 
         return restored_tzinfo

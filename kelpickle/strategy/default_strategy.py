@@ -209,14 +209,14 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
             match reduce_result:
                 case copyreg.__newobj_ex__, (_, new_args, new_kwargs), *_:
                     if new_args:
-                        result["new_args"] = pickler.reduce(new_args)
+                        result["new_args"] = pickler.reduce(new_args, relative_key="new_args")
 
                     if new_kwargs:
-                        result["new_kwargs"] = pickler.reduce(new_kwargs)
+                        result["new_kwargs"] = pickler.reduce(new_kwargs, relative_key="new_kwargs")
 
                 case copyreg.__newobj__, (_, *new_args), *_:
                     if new_args:
-                        result["new_args"] = pickler.reduce(new_args)
+                        result["new_args"] = pickler.reduce(new_args, relative_key="new_args")
 
                 case _:
                     raise PicklingError(f"Instance of type {instance_type} cannot be pickled. The default "
@@ -224,7 +224,7 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
 
             instance_state = reduce_result[2]
             if instance_state is not None:
-                result['state'] = pickler.reduce(instance_state)
+                result['state'] = pickler.reduce(instance_state, relative_key="state")
 
             return result
 
@@ -237,9 +237,14 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
 
             return {'reduce': f"{containing_module}/{reduce_result}"}
 
+        # TODO: Reconsider to somehow put a "reduce" relative key before accessing each member with its own relative
+        #  key.
         # Ugly patch here. We're translating the args part of the tuple to a list. This is done so the args part will
         # be more readable (just a list instead of a json with a tuple strategy). Should matter but we'll see.
-        jsonified_result = [pickler.reduce(list(x)) if i == 1 else pickler.reduce(x) for i, x in enumerate(reduce_result)]
+        jsonified_result = [
+            pickler.reduce(list(x), relative_key=str(i)) if i == 1 else pickler.reduce(x, relative_key=str(i))
+            for i, x in enumerate(reduce_result)
+        ]
 
         return {'reduce': jsonified_result}
 
@@ -254,11 +259,11 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
             # TODO: Find a way to not restore the args and kwargs if they are not given. Not only will it optimize, it
             #  will also make the strategy not being aware of the pickler's format (Which is arguably even more
             #  important).
-            new_args = unpickler.restore(reduced_object.get('new_args', []))
-            new_kwargs = unpickler.restore(reduced_object.get('new_kwargs', {}))
+            new_args = unpickler.restore(reduced_object.get('new_args', []), relative_key="new_args")
+            new_kwargs = unpickler.restore(reduced_object.get('new_kwargs', {}), relative_key="new_kwargs")
             instance = instance_type.__new__(instance_type, *new_args, **new_kwargs)
 
-            instance_state = unpickler.restore(reduced_object.get('state'))
+            instance_state = unpickler.restore(reduced_object.get('state'), relative_key="state")
             if instance_state is not None:
                 set_state(instance, instance_state)
 
@@ -269,5 +274,5 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
 
         # TODO: type this in a better way
         reduce_result: PyReduceBuildInstructions = tuple(
-            unpickler.restore(member) for member in flattened_reduce)  # type: ignore
+            unpickler.restore(member, relative_key=str(i)) for i, member in enumerate(flattened_reduce))  # type: ignore
         return build_from_python_reduce(*reduce_result)

@@ -24,10 +24,10 @@ class TupleStrategy(BaseNonNativeJsonStrategy[tuple, TupleReductionResult]):
 
     @staticmethod
     def reduce(instance: tuple, pickler: Pickler) -> TupleReductionResult:
-        return {'value': [pickler.reduce(member) for member in instance]}
+        return {'value': [pickler.reduce(member, relative_key=str(i)) for i, member in enumerate(instance)]}
 
     @staticmethod
     def restore(reduced_object: TupleReductionResult, unpickler: Unpickler) -> tuple:
         # TODO: Create the tuple one member at a time so you can record reference of the set beforehand
         #  (Use PyTuple_SET)
-        return tuple(unpickler.restore(member) for member in reduced_object['value'])
+        return tuple(unpickler.restore(member, relative_key=str(i)) for i, member in enumerate(reduced_object['value']))

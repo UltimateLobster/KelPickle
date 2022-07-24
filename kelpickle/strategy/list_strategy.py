@@ -22,8 +22,8 @@ class ListStrategy(BaseStrategy[list, JsonList[ListReductionResultMemberType]]):
 
     @staticmethod
     def reduce(instance: list, pickler: Pickler) -> JsonList[ListReductionResultMemberType]:
-        return [pickler.reduce(member) for member in instance]
+        return [pickler.reduce(member, relative_key=str(i)) for i, member in enumerate(instance)]
 
     @staticmethod
     def restore(reduced_object: JsonList[ListReductionResultMemberType], unpickler: Unpickler) -> list:
-        return [unpickler.restore(member) for member in reduced_object]
+        return [unpickler.restore(member, relative_key=str(i)) for i, member in enumerate(reduced_object)]

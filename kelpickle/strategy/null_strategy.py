@@ -13,6 +13,10 @@ Native = TypeVar("Native", bound=JsonNative)
 
 class NullStrategy(Generic[Native], BaseStrategy[Native, Native]):
     @staticmethod
+    def should_auto_generate_references():
+        return False
+
+    @staticmethod
     def get_strategy_name() -> str:
         return 'null'
 

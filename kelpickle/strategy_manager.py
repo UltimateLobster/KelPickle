@@ -12,7 +12,7 @@ __type_to_strategy: dict[type, Type[BaseStrategy]] = {}
 __name_to_strategy: dict[str, Type[BaseStrategy]] = {}
 
 
-def register_strategy(cls: Type[BaseStrategy]):
+def register_strategy(cls: Type[BaseStrategy], * base_types):
     for type_ in cls.get_supported_types():
         if type_ in __type_to_strategy and __type_to_strategy[type_] is not cls:
             raise StrategyConflictError(f"Cannot configure type {type_} for strategy {cls}. It is already "

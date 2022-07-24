@@ -20,14 +20,17 @@ class DictStrategy(BaseStrategy[dict, dict]):
     @staticmethod
     def reduce(instance: dict, pickler: Pickler) -> ReductionResult:
         return {
-            pickler.reduce(key): pickler.reduce(value)
-            for key, value in instance.items()
+            # TODO: This is just temporary values for the dictionary relative keys. We would need to reconsider them
+            #      in order to maintain readability and when reading the result manually as well as consistency between
+            #      pickling and unpickling.
+            pickler.reduce(key, relative_key=f"{i}_KEY"): pickler.reduce(value, relative_key=str(i))
+            for i, (key, value) in enumerate(instance.items())
         }
 
     @staticmethod
     def restore(reduced_object: ReductionResult, unpickler: Unpickler) -> dict:
         result = {}
-        for key, value in reduced_object.items():
-            result[unpickler.restore(key)] = unpickler.restore(value)
+        for i, (key, value) in enumerate(reduced_object.items()):
+            result[unpickler.restore(key, relative_key=f"{i}_KEY")] = unpickler.restore(value, relative_key=str(i))
 
         return result

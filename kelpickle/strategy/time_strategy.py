@@ -25,12 +25,12 @@ class TimeStrategy(BaseNonNativeJsonStrategy[time, TimeStrategyResult]):
         return {
             'value': instance.isoformat(),
             'fold': instance.fold,
-            'tzinfo': pickler.reduce(instance.tzinfo)
+            'tzinfo': pickler.reduce(instance.tzinfo, relative_key='tzinfo')
         }
 
     @staticmethod
     def restore(reduced_object: TimeStrategyResult, unpickler: Unpickler) -> time:
-        restored_tzinfo = unpickler.restore(reduced_object['tzinfo'])
+        restored_tzinfo = unpickler.restore(reduced_object['tzinfo'], relative_key='tzinfo')
         restored_time = time.fromisoformat(reduced_object['value'])
 
         return restored_time.replace(fold=reduced_object['fold'], tzinfo=restored_tzinfo)

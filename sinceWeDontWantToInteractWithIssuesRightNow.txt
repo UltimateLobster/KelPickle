@@ -6,7 +6,7 @@ Features:
     support strategies that work on subclasses
     Dicts with saved words
     Unrestorable objects
-    Reference management
+    Reference management - V
     Proxies
     Cython
     Complex keys

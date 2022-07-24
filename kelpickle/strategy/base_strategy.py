@@ -21,6 +21,10 @@ ReductionResult: TypeAlias = JsonicReductionResult | list | JsonNative
 
 class BaseStrategy(Generic[_OriginalType, _ReducedInstanceType], metaclass=ABCMeta):
     @staticmethod
+    def should_auto_generate_references():
+        return True
+
+    @staticmethod
     @abstractmethod
     def get_strategy_name() -> str:
         raise NotImplementedError()

@@ -3,11 +3,8 @@ from __future__ import annotations
 from types import (
     ModuleType,
     FunctionType,
-    BuiltinFunctionType,
-    BuiltinMethodType,
     WrapperDescriptorType,
     MethodDescriptorType,
-    ClassMethodDescriptorType,
     GetSetDescriptorType,
     MemberDescriptorType
 )
