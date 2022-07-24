@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from pickle import DEFAULT_PROTOCOL
-from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias, Type
+from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias, Type, Sequence, TypeVar
 import copyreg
 
 from kelpickle.common import JsonList, PicklingError
@@ -18,14 +18,20 @@ DEFAULT_REDUCE_EX = object.__reduce_ex__
 
 
 ImportString: TypeAlias = str
-InstanceState: TypeAlias = dict[str, Any] | tuple[dict[str, Any], dict[str, Any]]
+
+Instance = TypeVar("Instance", bound=Any)
+InstanceState = TypeVar("InstanceState", bound=Any)
+InstanceCreatorArguments = Sequence[Any]
+InstanceCreator: TypeAlias = Callable[[InstanceCreatorArguments], Instance]
+DefaultInstanceState: TypeAlias = dict[str, Any] | tuple[dict[str, Any], dict[str, Any]]
+
 PyReduceBuildInstructions: TypeAlias = tuple[
-    Callable,
-    Iterable,
-    Optional[InstanceState | Any],
-    Optional[Iterable],
+    InstanceCreator,
+    InstanceCreatorArguments,
+    Optional[DefaultInstanceState | InstanceState],
+    Optional[Iterable[Any]],
     Optional[Iterable[tuple[str, Any]]],
-    Optional[Callable[[Any, InstanceState], None]]
+    Optional[Callable[[Instance, InstanceState], None]]
 ]
 
 PyReduceResult: TypeAlias = ImportString | PyReduceBuildInstructions
@@ -84,15 +90,12 @@ def _default_set_state(instance: Any, state: InstanceState) -> None:
             f'2. Implemented a __setstate__ that can handle such states\n'
             f'3. Implemented a valid __reduce__/__reduce_ex__.')
 
-    # Dynamic attributes are being changed directly through the instance's __dict__ so it won't trigger custom
-    # implementations of __setattr__
-    instance_dict = instance.__dict__
     for attribute_name, attribute_value in dynamic_attributes.items():
-        instance_dict[attribute_name] = attribute_value
+        instance.__dict__[attribute_name] = attribute_value
 
-    # Unlike dynamic attributes, slotted attributes aren't stored on the instance's __dict__ and therefore can only
+    # Unlike dynamic attributes, slotted attributes aren't stored on the instance's __dict__ and therefore need to
     # be set normally
-    for attribute_name, attribute_value in slotted_attributes:
+    for attribute_name, attribute_value in slotted_attributes.items():
         setattr(instance, attribute_name, attribute_value)
 
 
@@ -111,23 +114,32 @@ def set_state(instance: Any, state: InstanceState) -> None:
         instance_set_state(state)
 
 
-def build_from_pyreduce(reduce_result: PyReduceBuildInstructions) -> Any:
+def build_from_python_reduce(
+        callable_: InstanceCreator,
+        args: InstanceCreatorArguments,
+        state: Optional[InstanceState] = None,
+        list_items: Optional[Iterable[Any]] = None,
+        dict_items: Optional[Iterable[Sequence[str, Any]]] = None,
+        custom_set_state: Optional[Callable[[Instance, InstanceState], None]] = None) -> Instance:
     """
-    Build an instance from the non-str result of a previously called __reduce__/__reduce_ex__.
+    Build an instance from the returned build instructions of a previously called __reduce__/__reduce_ex__. Each
+    argument corresponds to the positional member of the build instructions.
+    (This obviously should only be called on the non-str results of the python reduce protocol.)
 
-    Explanation about python's reduce:
-       # TODO: Add explanation here.
-
-    :param reduce_result: The result of __reduce__/__reduce_ex__
+    :param callable_: A callable that will be used in order to create a new instance. This instance may
+                      (and probably will) be empty at that point.
+    :param args: The arguments that will be passed to the callable.
+    :param state: The state of the instance.
+    :param list_items: The items of the list that was reduced.
+    :param dict_items: The items of the dict that was reduced.
+    :param custom_set_state: A function that will be called to set the state of the instance.
     :return: The newly created instance.
     """
-    # TODO: Add support for string use_python_reduce results
-    callable_, args, state, list_items, dict_items, custom_set_state = reduce_result
 
     # Step 1: Create the instance
     instance = callable_(*args)
 
-    # Step 2: Add items
+    # Step 2: Extend items (relevant only for list subclasses, should happen before setting state)
     if list_items is not None:
         try:
             extend = instance.extend
@@ -140,7 +152,7 @@ def build_from_pyreduce(reduce_result: PyReduceBuildInstructions) -> Any:
         else:
             extend(list_items)
 
-    # Step 3: Set items
+    # Step 3: Extend keyword items (relevant only for dict subclasses, should happen before setting state)
     if dict_items is not None:
         for key, value in dict_items:
             instance[key] = value
@@ -196,14 +208,14 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
 
             match reduce_result:
                 case copyreg.__newobj_ex__, (_, new_args, new_kwargs), *_:
-                    if new_args is not None:
+                    if new_args:
                         result["new_args"] = pickler.reduce(new_args)
 
-                    if new_kwargs is not None:
+                    if new_kwargs:
                         result["new_kwargs"] = pickler.reduce(new_kwargs)
 
                 case copyreg.__newobj__, (_, *new_args), *_:
-                    if new_args is not None:
+                    if new_args:
                         result["new_args"] = pickler.reduce(new_args)
 
                 case _:
@@ -225,9 +237,9 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
 
             return {'reduce': f"{containing_module}/{reduce_result}"}
 
-        jsonified_result = [pickler.reduce(x) for x in reduce_result]
-        none_padding: JsonList = [None] * (6 - len(jsonified_result))
-        jsonified_result.extend(none_padding)
+        # Ugly patch here. We're translating the args part of the tuple to a list. This is done so the args part will
+        # be more readable (just a list instead of a json with a tuple strategy). Should matter but we'll see.
+        jsonified_result = [pickler.reduce(list(x)) if i == 1 else pickler.reduce(x) for i, x in enumerate(reduce_result)]
 
         return {'reduce': jsonified_result}
 
@@ -258,4 +270,4 @@ class DefaultStrategy(BaseNonNativeJsonStrategy[Any, DefaultReductionResult]):
         # TODO: type this in a better way
         reduce_result: PyReduceBuildInstructions = tuple(
             unpickler.restore(member) for member in flattened_reduce)  # type: ignore
-        return build_from_pyreduce(reduce_result)
+        return build_from_python_reduce(*reduce_result)

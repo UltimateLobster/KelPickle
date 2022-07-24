@@ -12,24 +12,8 @@ from datetime import date, time, datetime, timedelta, timezone, tzinfo
 from kelpickle.kelpickling import Pickler, Unpickler
 
 
-class CustomTzInfo(tzinfo):
-    def __init__(self, offset: timedelta):
-        self.offset = offset
-
-    def __getinitargs__(self):
-        return self.offset,
-
-    def utcoffset(self, dt: datetime) -> timedelta:
-        return self.offset
-
-    def tzname(self, dt: datetime) -> str:
-        return "CustomTzInfo"
-
-    def dst(self, dt: datetime) -> timedelta:
-        return timedelta(0)
-
-    def __eq__(self, other):
-        return type(self) == type(other) and self.offset == other.offset
+def custom_function():
+    pass
 
 
 @dataclass
@@ -86,8 +70,45 @@ class CustomReduceExObject:
         return CustomReduceExObject, (self.supported_protocol,), {}
 
 
-def custom_function():
-    pass
+class CustomSlottedClass:
+    __slots__ = ("x",)
+
+    def __init__(self, x: int):
+        self.x = x
+
+    def __eq__(self, other):
+        return type(self) == type(other) and self.x == other.x
+
+
+class CustomSlottedClassWithDynamicDict:
+    __slots__ = ("x", "__dict__")
+
+    def __init__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+
+    def __eq__(self, other):
+        return type(self) == type(other) and self.x == other.x and self.y == other.y
+
+
+class CustomTzInfo(tzinfo):
+    def __init__(self, offset: timedelta):
+        self.offset = offset
+
+    def __getinitargs__(self):
+        return self.offset,
+
+    def utcoffset(self, dt: datetime) -> timedelta:
+        return self.offset
+
+    def tzname(self, dt: datetime) -> str:
+        return "CustomTzInfo"
+
+    def dst(self, dt: datetime) -> timedelta:
+        return timedelta(0)
+
+    def __eq__(self, other):
+        return type(self) == type(other) and self.offset == other.offset
 
 
 def default_value_comparison(original_value, deserialized_value) -> bool:
@@ -164,6 +185,8 @@ def create_sanity_test_params() -> Iterable[SanityTestParams]:
         SanityTestParams("instance with state", CustomStateObject(3)),
         SanityTestParams("instance with reduce", CustomReduceObject(3)),
         SanityTestParams("instance with reduce_ex", CustomReduceExObject(Pickler.PICKLE_PROTOCOL)),
+        SanityTestParams("instance with slots", CustomSlottedClass(3)),
+        SanityTestParams("instance with slots and dynamic dict", CustomSlottedClassWithDynamicDict(3, 4)),
         SanityTestParams("ellipsis", ...),
     ]
 

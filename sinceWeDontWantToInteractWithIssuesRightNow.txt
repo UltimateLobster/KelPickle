@@ -10,6 +10,7 @@ Features:
     Proxies
     Cython
     Complex keys
+    slots classes support - V
     bytes support - V
     datetime support - V
     timezone support - V
