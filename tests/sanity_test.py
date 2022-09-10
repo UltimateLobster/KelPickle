@@ -120,7 +120,8 @@ def builtin_method_sanity_test(original_value, deserialized_value) -> bool:
 
 
 def method_sanity_test(original_value: MethodType, deserialized_value: MethodType) -> bool:
-    return original_value.__func__ == deserialized_value.__func__ and builtin_method_sanity_test(original_value, deserialized_value)
+    return original_value.__func__ == deserialized_value.__func__ and \
+           builtin_method_sanity_test(original_value, deserialized_value)
 
 
 class SanityTestParams:
@@ -173,9 +174,6 @@ def create_sanity_test_params() -> Iterable[SanityTestParams]:
         SanityTestParams("builtin function", sum),
         SanityTestParams("builtin method", [].append, builtin_method_sanity_test),
         SanityTestParams("builtin method descriptor", list.append),
-        SanityTestParams("class method descriptor", dict.__dict__["fromkeys"], lambda x, y: pytest.skip(
-            "Class method descriptors (Or at least the one used in the types module) are not equal even after the "
-            "official pickling process.")),
         SanityTestParams("iterator", iter([1, 2, 3]), lambda x, y: list(x) == list(y)),
         SanityTestParams("not implemented", NotImplemented),
         SanityTestParams("module", CustomObject.__module__),

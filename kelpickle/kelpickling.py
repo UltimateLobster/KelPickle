@@ -3,52 +3,51 @@ from __future__ import annotations
 import json
 from pickle import DEFAULT_PROTOCOL
 
-from typing import Type, Any, Callable, Optional
+from typing import Any, TypeAlias, Optional, cast
 
-from kelpickle import DefaultStrategy
-from kelpickle.common import NATIVE_TYPES, KELP_STRATEGY_KEY
-from kelpickle.strategy.base_strategy import BaseStrategy, ReductionResult, JsonicReductionResult, \
-    BaseNonNativeJsonStrategy
-from kelpickle.strategy.null_strategy import NullStrategy
-from kelpickle.strategy.list_strategy import ListStrategy
-from kelpickle.strategy.dict_strategy import DictStrategy
-from kelpickle.strategy_manager import get_strategy_by_name, get_strategy_by_type
-
+from kelpickle.common import KELP_STRATEGY_KEY, NATIVE_TYPES
+from kelpickle._strategy_manager import (
+    register_strategy as register_internal_strategy,
+    get_pickling_strategy,
+    get_unpickling_strategy,
+    PicklingStrategy,
+    StrategyConflictError
+)
+from kelpickle.strategies.dict_strategy import reduce_dict
+from kelpickle.strategies.list_strategy import reduce_list, restore_list
+from kelpickle.strategies.null_strategy import reduce_null, restore_null
+from kelpickle.strategies.custom_strategy import (
+    restore_with_custom_strategy,
+    ReductionResult as CustomReductionResult,
+    CustomUnpicklingStrategy,
+    register_unpickling_strategy,
+    CustomPicklingStrategy,
+    T,
+    ReducedT,
+)
 
 ROOT_RELATIVE_KEY = "$ROOT"
 REFERENCE_STRATEGY_NAME = "reference"
+ReductionResult: TypeAlias = T | CustomReductionResult
+
+_DEFAULT_CUSTOM_PICKLING_STRATEGY = cast(CustomPicklingStrategy[T, ReducedT], get_pickling_strategy(object))
+if _DEFAULT_CUSTOM_PICKLING_STRATEGY is None:
+    raise StrategyConflictError("Default pickling strategy was not initialized")
 
 
-class PicklingError(Exception):
-    """
-    Error that occurs during the pickling process
-    """
-    pass
-
-
-class UnpicklingError(Exception):
-    """
-    Error that occurs during the unpickling process
-    """
-    pass
-
-
-class UnsupportedStrategy(UnpicklingError):
-    """
-    Error that occurs if encountered an object that was pickled using an unsupported strategy
-    """
-    pass
+class ReferenceReductionResult(CustomReductionResult):
+    reference: str
 
 
 class Pickler:
     PICKLE_PROTOCOL = DEFAULT_PROTOCOL
 
-    def __init__(self):
-        self.current_path = []
+    def __init__(self) -> None:
+        self.current_path: list[str] = []
         # Mapping between the id of encountered instances and their references in case we wish to reuse.
         self.instances_references: dict[int, str] = {}
 
-    def _clean_cache(self):
+    def _clean_cache(self) -> None:
         self.instances_references = {}
 
     def generate_current_reference(self) -> str:
@@ -82,7 +81,7 @@ class Pickler:
                              Ex. Consider the following object: {"outer1": {"inner1": 1, "inner2": 2}, "outer2": 2},
                              Upon reducing "outer1"'s value you will most likely need to call reduce on the value of
                              "inner1" as well as the value of "inner2". These 2 values will be called "sibling values"
-                             since they lie exactly one level beneith the value of "outer1". When reducing them, you
+                             since they lie exactly one level beneath the value of "outer1". When reducing them, you
                              will most likely need to pass "inner1"/"inner2" as the relative key. This is because they
                              will be unique among all of "outer1"'s direct calls to "reduce".
 
@@ -94,97 +93,63 @@ class Pickler:
         """
         self.current_path.append(relative_key)
         try:
-            instance_id = id(instance)
-            instance_reference = self.instances_references.get(instance_id)
-            if instance_reference is not None:
-                return self._reduce_by_reference(instance_reference)
-
             instance_type = instance.__class__
-            strategy = get_strategy_by_type(instance_type)
-            if strategy is None:
-                return self.default_reduce(instance)
+            strategy = get_pickling_strategy(instance_type)
+            if strategy.auto_generate_references:
+                reference_result = self._attempt_reduce_by_reference(instance)
+                if reference_result:
+                    return reference_result
 
-            return self.reduce_by_strategy(instance, strategy)
+            return self.use_strategy(instance, strategy)
         finally:
             self.current_path.pop()
 
     def default_reduce(self, instance: Any) -> ReductionResult:
         """
-        Reduce an instance using the default strategy. This function is encouraged to be used by strategies that wish to
-        "extend" the default strategy.
+        Reduce an instance using the default strategies. This function is encouraged to be used by strategies that wish
+        to "extend" the default functionality.
 
         :param instance: The instance to use_python_reduce
         :return: The reduced instance
         """
-        return self.reduce_by_strategy(instance, DefaultStrategy)
+        return self.use_strategy(instance, _DEFAULT_CUSTOM_PICKLING_STRATEGY)
 
-    def reduce_by_non_native_json_strategy(self, instance: Any, strategy: Type[BaseNonNativeJsonStrategy]) -> JsonicReductionResult:
-        reduced_instance = strategy.reduce(instance, self)
-        reduced_instance[KELP_STRATEGY_KEY] = strategy.get_strategy_name()
+    def use_strategy(self, instance: Any, strategy: PicklingStrategy[T]) -> T | ReferenceReductionResult:
+        return strategy.reducer(instance, self)
 
-        return reduced_instance
-
-    def reduce_by_strategy(self, instance: Any, strategy: Type[BaseStrategy]) -> ReductionResult:
+    def _attempt_reduce_by_reference(self, instance: Any) -> Optional[ReferenceReductionResult]:
         """
-        Reduce an instance using the specific strategy.
+        Attempt to reduce an instance using the reference strategies. If this is the first attempt, the instance will not
+        be reduced and None will be returned. Otherwise, the result of the reduction by reference will be returned
 
-        :param instance: The instance to use_python_reduce
-        :param strategy: The strategy to use (assumed to be fitting to the given instance already)
+        :param instance: The reference that was generated for the instance
         :return: The reduced instance
         """
-        if strategy.should_auto_generate_references():
-            instance_reference = self.generate_current_reference()
-            self.instances_references[id(instance)] = instance_reference
+        instance_id = id(instance)
+        existing_reference_name = self.instances_references.get(instance_id)
+        if existing_reference_name:
+            return {KELP_STRATEGY_KEY: REFERENCE_STRATEGY_NAME, "reference": existing_reference_name}
 
-        if issubclass(strategy, BaseNonNativeJsonStrategy):
-            return self.reduce_by_non_native_json_strategy(instance, strategy)
-        else:
-            return strategy.reduce(instance, self)
-
-    @staticmethod
-    def _reduce_by_reference(instance_reference: str) -> ReductionResult:
-        """
-        Reduce an instance using the reference strategy.
-
-        :param instance_reference: The reference that was generated for the instance
-        :return: The reduced instance
-        """
-        return {KELP_STRATEGY_KEY: REFERENCE_STRATEGY_NAME, "reference": instance_reference}
+        self.instances_references[id(instance)] = self.generate_current_reference()
 
 
-def restore_by_strategy_value(reduced_instance: JsonicReductionResult, unpickler: Unpickler) -> Any:
+def restore_reference(reduced_object: ReferenceReductionResult, unpickler: Unpickler) -> Any:
     """
-    Restore reduced json-like objects using the strategy that's specified in their strategy key.
+    Restore an instance using the reference strategies.
 
-    :param reduced_instance: The reduced object to restore
-    :param unpickler: The unpickler to be used for any inner members that should be restored as well.
-    :return: The original object as was originally passed to Pickler's "use_python_reduce" function
+    :param reduced_object: The reference that was generated for the instance
+    :param unpickler: The unpickler that has been used to record the references
+    :return: The restored instance
     """
-
-    strategy_name: Optional[str] = reduced_instance.get(KELP_STRATEGY_KEY, DictStrategy.get_strategy_name())
-
-    if strategy_name == REFERENCE_STRATEGY_NAME:
-        return unpickler.restore_by_reference(reduced_instance["reference"])
-
-    strategy = get_strategy_by_name(strategy_name)
-    if strategy is None:
-        raise UnsupportedStrategy(f'Received an unsupported strategy name: {strategy_name}', strategy_name)
-
-    return strategy.restore(reduced_instance, unpickler)
+    return unpickler.reference_to_restored_instances[reduced_object["reference"]]
 
 
 class Unpickler:
-    reduced_type_to_restorer: dict[type, Callable[[ReductionResult, Unpickler], Any]] = {
-        dict: restore_by_strategy_value,
-        list: ListStrategy.restore,
-        **{native_type: NullStrategy.restore for native_type in NATIVE_TYPES}
-    }
-
-    def __init__(self):
-        self.current_path = []
+    def __init__(self) -> None:
+        self.current_path: list[str] = []
         self.reference_to_restored_instances: dict[str, Any] = {}
 
-    def _clear_cache(self):
+    def _clear_cache(self) -> None:
         self.reference_to_restored_instances = {}
 
     def generate_current_reference(self) -> str:
@@ -219,19 +184,33 @@ class Unpickler:
         finally:
             self.current_path.pop()
 
-    def restore_by_reference(self, reference: str) -> Any:
-        """
-        Restore an instance using the reference strategy.
-
-        :param reference: The reference that was generated for the instance
-        :return: The restored instance
-        """
-        return self.reference_to_restored_instances[reference]
-
-    # TODO: This desperately needs a better name
     def default_restore(self, reduced_object: ReductionResult) -> Any:
-        restorer = Unpickler.reduced_type_to_restorer.get(reduced_object.__class__)
-        if restorer is None:
-            raise UnpicklingError(f'Cannot restore object of type {reduced_object.__class__}.')
+        strategy = get_unpickling_strategy(reduced_object.__class__)
+        return strategy.restorer(reduced_object, self)
 
-        return restorer(reduced_object, self)
+
+register_unpickling_strategy(CustomUnpicklingStrategy(
+    "reference",
+    restorer=restore_reference
+))
+
+register_internal_strategy(
+    reducer=reduce_dict,
+    restorer=restore_with_custom_strategy,
+    auto_generate_references=True,
+    supported_types=[dict]
+)
+
+register_internal_strategy(
+    reducer=reduce_list,
+    restorer=restore_list,
+    auto_generate_references=True,
+    supported_types=[list]
+)
+
+register_internal_strategy(
+    reducer=reduce_null,
+    restorer=restore_null,
+    auto_generate_references=False,
+    supported_types=NATIVE_TYPES
+)
