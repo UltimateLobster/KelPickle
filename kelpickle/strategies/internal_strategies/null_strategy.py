@@ -10,9 +10,9 @@ if TYPE_CHECKING:
 NativeT = TypeVar("NativeT", bound=JsonNative)
 
 
-def reduce_null(instance: NativeT, pickler: Pickler) -> NativeT:
+def reduce_native(instance: NativeT, pickler: Pickler) -> NativeT:
     return instance
 
 
-def restore_null(reduced_object: NativeT, unpickler: Unpickler) -> NativeT:
+def restore_native(reduced_object: NativeT, unpickler: Unpickler) -> NativeT:
     return reduced_object

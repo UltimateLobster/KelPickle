@@ -14,6 +14,6 @@ class UnpicklingError(Exception):
 
 class UnsupportedStrategy(UnpicklingError):
     """
-    Error that occurs if encountered an object that was pickled using an unsupported strategies
+    Error that occurs if encountered an object that was pickled using an unsupported custom_strategies
     """
     pass

@@ -3,36 +3,20 @@ from __future__ import annotations
 import json
 from pickle import DEFAULT_PROTOCOL
 
-from typing import Any, TypeAlias, Optional, cast
+from typing import Any, TypeAlias, Optional, TypeVar
 
-from kelpickle.common import KELP_STRATEGY_KEY, NATIVE_TYPES
-from kelpickle._strategy_manager import (
-    register_strategy as register_internal_strategy,
+from kelpickle.common import KELP_STRATEGY_KEY, Json, JsonNative, JsonList
+from kelpickle.strategies.internal_strategies.internal_strategy import (
     get_pickling_strategy,
     get_unpickling_strategy,
     PicklingStrategy,
-    StrategyConflictError
 )
-from kelpickle.strategies.dict_strategy import reduce_dict
-from kelpickle.strategies.list_strategy import reduce_list, restore_list
-from kelpickle.strategies.null_strategy import reduce_null, restore_null
-from kelpickle.strategies.custom_strategy import (
-    restore_with_custom_strategy,
-    ReductionResult as CustomReductionResult,
-    CustomUnpicklingStrategy,
-    register_unpickling_strategy,
-    CustomPicklingStrategy,
-    T,
-    ReducedT,
-)
+from kelpickle.strategies.custom_strategies.custom_strategy import ReductionResult as CustomReductionResult
 
 ROOT_RELATIVE_KEY = "$ROOT"
 REFERENCE_STRATEGY_NAME = "reference"
-ReductionResult: TypeAlias = T | CustomReductionResult
-
-_DEFAULT_CUSTOM_PICKLING_STRATEGY = cast(CustomPicklingStrategy[T, ReducedT], get_pickling_strategy(object))
-if _DEFAULT_CUSTOM_PICKLING_STRATEGY is None:
-    raise StrategyConflictError("Default pickling strategy was not initialized")
+ReductionResult: TypeAlias = Json | JsonNative | JsonList | CustomReductionResult
+T = TypeVar('T')
 
 
 class ReferenceReductionResult(CustomReductionResult):
@@ -46,6 +30,7 @@ class Pickler:
         self.current_path: list[str] = []
         # Mapping between the id of encountered instances and their references in case we wish to reuse.
         self.instances_references: dict[int, str] = {}
+        self.__default_strategy = get_pickling_strategy(object)
 
     def _clean_cache(self) -> None:
         self.instances_references = {}
@@ -100,27 +85,32 @@ class Pickler:
                 if reference_result:
                     return reference_result
 
-            return self.use_strategy(instance, strategy)
+            return self._use_strategy(instance, strategy)
         finally:
             self.current_path.pop()
 
     def default_reduce(self, instance: Any) -> ReductionResult:
         """
-        Reduce an instance using the default strategies. This function is encouraged to be used by strategies that wish
-        to "extend" the default functionality.
+        Reduce an instance using the default custom_strategies. This function is encouraged to be used by custom
+        strategies that wish to "extend" the default functionality.
 
         :param instance: The instance to use_python_reduce
         :return: The reduced instance
         """
-        return self.use_strategy(instance, _DEFAULT_CUSTOM_PICKLING_STRATEGY)
+        return self._use_strategy(instance, self.__default_strategy)
 
-    def use_strategy(self, instance: Any, strategy: PicklingStrategy[T]) -> T | ReferenceReductionResult:
-        return strategy.reducer(instance, self)
+    def _use_strategy(
+            self,
+            instance: Any,
+            pickling_strategy: PicklingStrategy[T, Any]
+    ) -> T | ReferenceReductionResult:
+        return pickling_strategy.reduce_function(instance, self)
 
     def _attempt_reduce_by_reference(self, instance: Any) -> Optional[ReferenceReductionResult]:
         """
-        Attempt to reduce an instance using the reference strategies. If this is the first attempt, the instance will not
-        be reduced and None will be returned. Otherwise, the result of the reduction by reference will be returned
+        Attempt to reduce an instance using the reference custom_strategies. If this is the first attempt, the instance
+        will not be reduced and None will be returned. Otherwise, the result of the reduction by reference will be
+        returned.
 
         :param instance: The reference that was generated for the instance
         :return: The reduced instance
@@ -131,11 +121,12 @@ class Pickler:
             return {KELP_STRATEGY_KEY: REFERENCE_STRATEGY_NAME, "reference": existing_reference_name}
 
         self.instances_references[id(instance)] = self.generate_current_reference()
+        return None
 
 
 def restore_reference(reduced_object: ReferenceReductionResult, unpickler: Unpickler) -> Any:
     """
-    Restore an instance using the reference strategies.
+    Restore an instance using the reference custom_strategies.
 
     :param reduced_object: The reference that was generated for the instance
     :param unpickler: The unpickler that has been used to record the references
@@ -185,32 +176,5 @@ class Unpickler:
             self.current_path.pop()
 
     def default_restore(self, reduced_object: ReductionResult) -> Any:
-        strategy = get_unpickling_strategy(reduced_object.__class__)
-        return strategy.restorer(reduced_object, self)
-
-
-register_unpickling_strategy(CustomUnpicklingStrategy(
-    "reference",
-    restorer=restore_reference
-))
-
-register_internal_strategy(
-    reducer=reduce_dict,
-    restorer=restore_with_custom_strategy,
-    auto_generate_references=True,
-    supported_types=[dict]
-)
-
-register_internal_strategy(
-    reducer=reduce_list,
-    restorer=restore_list,
-    auto_generate_references=True,
-    supported_types=[list]
-)
-
-register_internal_strategy(
-    reducer=reduce_null,
-    restorer=restore_null,
-    auto_generate_references=False,
-    supported_types=NATIVE_TYPES
-)
+        unpickling_strategy = get_unpickling_strategy(reduced_object.__class__)
+        return unpickling_strategy.restore_function(reduced_object, self)

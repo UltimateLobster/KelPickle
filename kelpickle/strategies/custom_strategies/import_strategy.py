@@ -8,13 +8,12 @@ from types import (
     GetSetDescriptorType,
     MemberDescriptorType,
 )
-from typing import TYPE_CHECKING, Any, Type, TypeAlias
+from typing import TYPE_CHECKING, Any, Type, TypeAlias, TypedDict
 
-from kelpickle.strategies.custom_strategy import ReductionResult
+from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
 
 if TYPE_CHECKING:
     from kelpickle.kelpickling import Pickler, Unpickler
-
 
 Importable: TypeAlias = (
     Type[Any] |
@@ -41,13 +40,24 @@ def restore_import_string(import_string: str, /) -> Importable:
     return current_object
 
 
-class ImportReductionResult(ReductionResult):
+class ImportReductionResult(TypedDict):
     import_string: str
 
 
-def reduce_import(instance: Importable, pickler: Pickler) -> ImportReductionResult:
-    return {'import_string': get_import_string(instance)}
+@register_strategy('import', supported_types=[
+    type,
+    FunctionType,
+    ModuleType,
+    WrapperDescriptorType,
+    MethodDescriptorType,
+    GetSetDescriptorType,
+    MemberDescriptorType],
+    auto_generate_references=False)
+class ImportStrategy(Strategy):
+    @staticmethod
+    def reduce(instance: Importable, pickler: Pickler) -> ImportReductionResult:
+        return {'import_string': get_import_string(instance)}
 
-
-def restore_import(reduced_object: ImportReductionResult, unpickler: Unpickler) -> Importable:
-    return restore_import_string(reduced_object['import_string'])
+    @staticmethod
+    def restore(reduced_object: ImportReductionResult, unpickler: Unpickler) -> Importable:
+        return restore_import_string(reduced_object['import_string'])

@@ -4,17 +4,17 @@ import sys
 
 from pickle import DEFAULT_PROTOCOL
 from copyreg import __newobj__, __newobj_ex__  # type: ignore
-from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias, Type, Sequence, TypeVar, cast, Union
+from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias, Type, Sequence, TypeVar, cast, Union, \
+    TypedDict
 
 from typing_extensions import NotRequired
 
+from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
 from kelpickle.common import JsonList, PicklingError, Json
-from kelpickle.strategies.custom_strategy import ReductionResult
-from kelpickle.strategies.custom.import_strategy import restore_import_string, get_import_string
+from kelpickle.strategies.custom_strategies.import_strategy import restore_import_string, get_import_string
 
 if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler
-
+    from kelpickle.kelpickling import Pickler, Unpickler, ReductionResult
 
 DEFAULT_REDUCE = object.__reduce__
 DEFAULT_REDUCE_EX = object.__reduce_ex__
@@ -174,11 +174,11 @@ def build_from_python_reduce(
     return instance
 
 
-class CustomReduceResult(ReductionResult):
+class CustomReduceResult(TypedDict):
     reduce: JsonList | ImportString
 
 
-class CustomStateResult(ReductionResult):
+class CustomStateResult(TypedDict):
     type: ImportString
     state:  NotRequired[ReductionResult]
     new_args: NotRequired[list[Any]]
@@ -188,100 +188,104 @@ class CustomStateResult(ReductionResult):
 ObjectReductionResult: TypeAlias = CustomStateResult | CustomReduceResult
 
 
-def reduce_object(instance: Any, pickler: Pickler) -> ObjectReductionResult:
-    instance_type = instance.__class__
-    # The following line assumes there is a valid __reduce_ex__ existing on the instance. Pickle however does an
-    # explicit check for that. I'm not sure though if this is relevant anymore (instead of just a python 2 compatibility
-    # thing. If it turns out it is necessary, I will add the normal pickle behavior
-    reduce_result = instance.__reduce_ex__(DEFAULT_PROTOCOL)
-    if instance_type.__reduce_ex__ == DEFAULT_REDUCE_EX and instance_type.__reduce__ == DEFAULT_REDUCE:
-        # We have no custom implementation of __reduce__/__reduce_ex__. We can use the prettier representation of
-        # the object
-        reduce_result = cast(PyReduceBuildInstructions, reduce_result)
-        result: CustomStateResult = {
-            "type": get_import_string(instance_type)
-        }
+@register_strategy('python_object', supported_types=object, consider_subclasses=True)
+class ObjectStrategy(Strategy):
+    @staticmethod
+    def reduce(instance: Any, pickler: Pickler) -> ObjectReductionResult:
+        instance_type = instance.__class__
+        # The following line assumes there is a valid __reduce_ex__ existing on the instance. Pickle however does an
+        # explicit check for that. I'm not sure though if this is relevant anymore (instead of just a python 2
+        # compatibility thing. If it turns out it is necessary, I will add the normal pickle behavior
+        reduce_result = instance.__reduce_ex__(DEFAULT_PROTOCOL)
+        if instance_type.__reduce_ex__ == DEFAULT_REDUCE_EX and instance_type.__reduce__ == DEFAULT_REDUCE:
+            # We have no custom_strategies implementation of __reduce__/__reduce_ex__. We can use the prettier
+            # representation of the object
+            reduce_result = cast(PyReduceBuildInstructions, reduce_result)
+            result: CustomStateResult = {
+                "type": get_import_string(instance_type)
+            }
 
-        if reduce_result[0] == __newobj_ex__:
-            _, new_args, new_kwargs = reduce_result[1]
-            if new_args:
-                result["new_args"] = cast(JsonList, pickler.reduce(new_args, relative_key="new_args"))
+            if reduce_result[0] == __newobj_ex__:
+                _, new_args, new_kwargs = reduce_result[1]
+                if new_args:
+                    result["new_args"] = cast(JsonList, pickler.reduce(new_args, relative_key="new_args"))
 
-            if new_kwargs:
-                result["new_kwargs"] = cast(Json, pickler.reduce(new_kwargs, relative_key="new_kwargs"))
+                if new_kwargs:
+                    result["new_kwargs"] = cast(Json, pickler.reduce(new_kwargs, relative_key="new_kwargs"))
 
-        elif reduce_result[0] == __newobj__:
-            _, *new_args = reduce_result[1]
-            if new_args:
-                result["new_args"] = cast(JsonList, pickler.reduce(new_args, relative_key="new_args"))
+            elif reduce_result[0] == __newobj__:
+                _, *new_args = reduce_result[1]
+                if new_args:
+                    result["new_args"] = cast(JsonList, pickler.reduce(new_args, relative_key="new_args"))
+
+            else:
+                raise PicklingError(f"Instance of type {instance_type} cannot be pickled. The default "
+                                    f"implementation of the reduce protocol yields an unsupported result.")
+
+            instance_state = reduce_result[2]
+            if instance_state is not None:
+                result["state"] = pickler.reduce(instance_state, relative_key="state")
+
+            return result
+
+        if isinstance(reduce_result, str):
+            # The result is an import string that's missing the module part.
+            containing_module = get_containing_module(reduce_result)
+            if containing_module is None:
+                raise PicklingError(f"Could not pickle object of type {type(instance)} with use_python_reduce result "
+                                    f"{reduce_result}, it is not importable from any module.")
+
+            return {'reduce': f"{containing_module}/{reduce_result}"}
+
+        # TODO: Reconsider to somehow put a "reduce" relative key before accessing each member with its own relative
+        #  key.
+        callable_ = reduce_result[0]
+        # This is done so the args part will be more readable (just a list instead of a json created from the tuple
+        # strategy).
+        args = list(reduce_result[1])
+
+        jsonified_result = [
+            pickler.reduce(callable_, relative_key="0"),
+            pickler.reduce(args, relative_key="1"),
+            *[pickler.reduce(x, relative_key=str(i))
+              for i, x, in enumerate(reduce_result[2:], 2)
+              ]
+        ]
+
+        return {'reduce': jsonified_result}
+
+    @staticmethod
+    def restore(reduced_object: ObjectReductionResult, unpickler: Unpickler) -> Any:
+        if "reduce" in reduced_object:
+            reduced_object = cast(CustomReduceResult, reduced_object)
+            flattened_reduce = reduced_object["reduce"]
+            if isinstance(flattened_reduce, str):
+                return restore_import_string(flattened_reduce)
+
+            assert isinstance(flattened_reduce,
+                              list), f"Expected flattened reduce to be a list, received {type(flattened_reduce)}"
+
+            # TODO: type this in a better way
+            reduce_result: PyReduceBuildInstructions = tuple(  # type: ignore
+                unpickler.restore(member, relative_key=str(i)) for i, member in enumerate(flattened_reduce)
+            )
+            return build_from_python_reduce(*reduce_result)
 
         else:
-            raise PicklingError(f"Instance of type {instance_type} cannot be pickled. The default "
-                                f"implementation of the reduce protocol yields an unsupported result.")
+            # Object was not serialized using __reduce__
+            reduced_object = cast(CustomStateResult, reduced_object)
+            flattened_instance_type = reduced_object['type']
+            instance_type = cast(Type[Any], restore_import_string(flattened_instance_type))
 
-        instance_state = reduce_result[2]
-        if instance_state is not None:
-            result["state"] = pickler.reduce(instance_state, relative_key="state")
+            # TODO: Find a way to not restore the args and kwargs if they are not given. Not only will it optimize, it
+            #  will also make the custom_strategies not being aware of the pickler's format (Which is arguably even more
+            #  important).
+            new_args = unpickler.restore(reduced_object.get('new_args', []), relative_key="new_args")
+            new_kwargs = unpickler.restore(reduced_object.get('new_kwargs', {}), relative_key="new_kwargs")
+            instance = instance_type.__new__(instance_type, *new_args, **new_kwargs)
 
-        return result
+            reduced_state = reduced_object.get('state')
+            if reduced_state:
+                set_state(instance, unpickler.restore(reduced_state, relative_key="state"))
 
-    if isinstance(reduce_result, str):
-        # The result is an import string that's missing the module part.
-        containing_module = get_containing_module(reduce_result)
-        if containing_module is None:
-            raise PicklingError(f"Could not pickle object of type {type(instance)} with use_python_reduce result "
-                                f"{reduce_result}, it is not importable from any module.")
-
-        return {'reduce': f"{containing_module}/{reduce_result}"}
-
-    # TODO: Reconsider to somehow put a "reduce" relative key before accessing each member with its own relative
-    #  key.
-    callable = reduce_result[0]
-    # This is done so the args part will be more readable (just a list instead of a json with a tuple strategies).
-    args = list(reduce_result[1])
-
-    jsonified_result = [
-        pickler.reduce(callable, relative_key="0"),
-        pickler.reduce(args, relative_key="1"),
-        *[pickler.reduce(x, relative_key=str(i))
-          for i, x, in enumerate(reduce_result[2:], 2)
-          ]
-    ]
-
-    return {'reduce': jsonified_result}
-
-
-def restore_object(reduced_object: ObjectReductionResult, unpickler: Unpickler) -> Any:
-    if "reduce" in reduced_object:
-        reduced_object = cast(CustomReduceResult, reduced_object)
-        flattened_reduce = reduced_object["reduce"]
-        if isinstance(flattened_reduce, str):
-            return restore_import_string(flattened_reduce)
-
-        assert isinstance(flattened_reduce,
-                          list), f"Expected flattened reduce to be a list, received {type(flattened_reduce)}"
-
-        # TODO: type this in a better way
-        reduce_result: PyReduceBuildInstructions = tuple(  # type: ignore
-            unpickler.restore(member, relative_key=str(i)) for i, member in enumerate(flattened_reduce)
-        )
-        return build_from_python_reduce(*reduce_result)
-
-    else:
-        # Object was not serialized using __reduce__
-        reduced_object = cast(CustomStateResult, reduced_object)
-        flattened_instance_type = reduced_object['type']
-        instance_type = cast(Type[Any], restore_import_string(flattened_instance_type))
-
-        # TODO: Find a way to not restore the args and kwargs if they are not given. Not only will it optimize, it
-        #  will also make the strategies not being aware of the pickler's format (Which is arguably even more
-        #  important).
-        new_args = unpickler.restore(reduced_object.get('new_args', []), relative_key="new_args")
-        new_kwargs = unpickler.restore(reduced_object.get('new_kwargs', {}), relative_key="new_kwargs")
-        instance = instance_type.__new__(instance_type, *new_args, **new_kwargs)
-
-        reduced_state = reduced_object.get('state')
-        if reduced_state:
-            set_state(instance, unpickler.restore(reduced_state, relative_key="state"))
-
-        return instance
+            return instance

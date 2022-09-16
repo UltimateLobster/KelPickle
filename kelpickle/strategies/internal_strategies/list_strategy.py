@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from kelpickle.strategies.custom_strategy import ReductionResult
 
 if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler
+    from kelpickle.kelpickling import Pickler, Unpickler, ReductionResult
 
 from kelpickle.common import JsonList
 
