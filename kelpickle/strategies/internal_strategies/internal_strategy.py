@@ -1,30 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Type, TypeVar, Callable, Generic, TypeAlias, TYPE_CHECKING
+from typing import Type, Callable, TypeAlias, TYPE_CHECKING, Any
 
-from kelpickle.common import JsonNative, Json
+from kelpickle.common import Jsonable
+
 if TYPE_CHECKING:
     from kelpickle.kelpickling import Pickler, Unpickler
 
 
-_BeforePicklingT = TypeVar('_BeforePicklingT', contravariant=True)
-_AfterPicklingT = TypeVar('_AfterPicklingT', covariant=True, bound=list | JsonNative | Json)
-_BeforeUnpicklingT = TypeVar('_BeforeUnpicklingT', covariant=True, bound=list | JsonNative | Json)
-_AfterUnpicklingT = TypeVar('_AfterUnpicklingT', contravariant=True)
-
-Reducer: TypeAlias = Callable[[_BeforePicklingT, 'Pickler'], _AfterPicklingT]
-Restorer: TypeAlias = Callable[[_BeforeUnpicklingT, 'Unpickler'], _AfterUnpicklingT]
+Reducer: TypeAlias = Callable[[Any, 'Pickler'], Jsonable]
+Restorer: TypeAlias = Callable[[Jsonable, 'Unpickler'], Any]
 
 
 @dataclass(kw_only=True)
-class PicklingStrategy(Generic[_BeforePicklingT, _AfterPicklingT]):
+class PicklingStrategy:
     reduce_function: Reducer
     auto_generate_references: bool
 
 
 @dataclass(kw_only=True)
-class UnpicklingStrategy(Generic[_BeforeUnpicklingT, _AfterUnpicklingT]):
+class UnpicklingStrategy:
     restore_function: Restorer
 
 
@@ -68,10 +64,7 @@ def register_unpickling_strategy(
     __type_to_unpickling_strategy[type_to_unpickle] = unpickling_strategy
 
 
-T = TypeVar('T')
-
-
-def get_pickling_strategy(instance_type: Type[T]) -> PicklingStrategy[T, _AfterPicklingT]:
+def get_pickling_strategy(instance_type: type) -> PicklingStrategy:
     strategy = __type_to_pickling_strategy.get(instance_type)
     if strategy is not None:
         return strategy
@@ -84,5 +77,5 @@ def get_pickling_strategy(instance_type: Type[T]) -> PicklingStrategy[T, _AfterP
     raise UnsupportedPicklingType(f'Type {instance_type} has no viable strategy available to use')
 
 
-def get_unpickling_strategy(reduced_type: T) -> UnpicklingStrategy[T, _AfterUnpicklingT]:
+def get_unpickling_strategy(reduced_type: Type[Jsonable]) -> UnpicklingStrategy:
     return __type_to_unpickling_strategy[reduced_type]

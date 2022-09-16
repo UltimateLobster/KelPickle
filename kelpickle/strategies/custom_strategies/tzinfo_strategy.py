@@ -2,7 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional, TypedDict
 from datetime import tzinfo, datetime
 
-from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy, ReductionResult
+from kelpickle.common import Jsonable
+from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
 
 if TYPE_CHECKING:
     from kelpickle.kelpickling import Pickler, Unpickler
@@ -12,7 +13,7 @@ _some_datetime = datetime.now()
 
 class TzInfoStrategyResult(TypedDict):
     offset: Optional[float]
-    tzinfo: ReductionResult
+    tzinfo: Jsonable
 
 
 @register_strategy('tzinfo', supported_types=tzinfo, consider_subclasses=True)

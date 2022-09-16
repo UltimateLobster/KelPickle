@@ -3,20 +3,19 @@ from __future__ import annotations
 import json
 from pickle import DEFAULT_PROTOCOL
 
-from typing import Any, TypeAlias, Optional, TypeVar
+from typing import Any, Optional
 
-from kelpickle.common import KELP_STRATEGY_KEY, Json, JsonNative, JsonList
+from kelpickle.common import KELP_STRATEGY_KEY, Jsonable
 from kelpickle.strategies.internal_strategies.internal_strategy import (
     get_pickling_strategy,
     get_unpickling_strategy,
     PicklingStrategy,
+    UnpicklingStrategy,
 )
-from kelpickle.strategies.custom_strategies.custom_strategy import ReductionResult as CustomReductionResult
+from kelpickle.strategies.custom_strategies.custom_strategy import CustomReductionResult
 
 ROOT_RELATIVE_KEY = "$ROOT"
 REFERENCE_STRATEGY_NAME = "reference"
-ReductionResult: TypeAlias = Json | JsonNative | JsonList | CustomReductionResult
-T = TypeVar('T')
 
 
 class ReferenceReductionResult(CustomReductionResult):
@@ -30,7 +29,7 @@ class Pickler:
         self.current_path: list[str] = []
         # Mapping between the id of encountered instances and their references in case we wish to reuse.
         self.instances_references: dict[int, str] = {}
-        self.__default_strategy = get_pickling_strategy(object)
+        self.__default_strategy: PicklingStrategy = get_pickling_strategy(object)
 
     def _clean_cache(self) -> None:
         self.instances_references = {}
@@ -56,7 +55,7 @@ class Pickler:
 
         return result
 
-    def reduce(self, instance: Any, *, relative_key: str) -> ReductionResult:
+    def reduce(self, instance: Any, *, relative_key: str) -> Jsonable:
         """
         Reduce the given instance to a simplified representation of the steps to rebuild it.
         :param instance: The instance to use_python_reduce
@@ -89,7 +88,7 @@ class Pickler:
         finally:
             self.current_path.pop()
 
-    def default_reduce(self, instance: Any) -> ReductionResult:
+    def default_reduce(self, instance: Any) -> Jsonable:
         """
         Reduce an instance using the default custom_strategies. This function is encouraged to be used by custom
         strategies that wish to "extend" the default functionality.
@@ -102,8 +101,8 @@ class Pickler:
     def _use_strategy(
             self,
             instance: Any,
-            pickling_strategy: PicklingStrategy[T, Any]
-    ) -> T | ReferenceReductionResult:
+            pickling_strategy: PicklingStrategy
+    ) -> Jsonable:
         return pickling_strategy.reduce_function(instance, self)
 
     def _attempt_reduce_by_reference(self, instance: Any) -> Optional[ReferenceReductionResult]:
@@ -158,7 +157,7 @@ class Unpickler:
 
         return result
 
-    def restore(self, reduced_object: ReductionResult, *, relative_key: str) -> Any:
+    def restore(self, reduced_object: Jsonable, *, relative_key: str) -> Any:
         """
 
         :param reduced_object: The result of the "reduce" function
@@ -175,6 +174,6 @@ class Unpickler:
         finally:
             self.current_path.pop()
 
-    def default_restore(self, reduced_object: ReductionResult) -> Any:
-        unpickling_strategy = get_unpickling_strategy(reduced_object.__class__)
-        return unpickling_strategy.restore_function(reduced_object, self)
+    def default_restore(self, reduced_object: Jsonable) -> Any:
+        strategy: UnpicklingStrategy = get_unpickling_strategy(reduced_object.__class__)
+        return strategy.restore_function(reduced_object, self)

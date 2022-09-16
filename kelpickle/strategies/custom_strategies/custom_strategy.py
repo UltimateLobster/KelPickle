@@ -22,7 +22,7 @@ ReducedT = TypeVar('ReducedT', bound=Json)
 
 __name_to_unpickling_strategy: dict[str, UnpicklingStrategy] = {}
 
-ReductionResult = TypedDict('ReductionResult', {
+CustomReductionResult = TypedDict('CustomReductionResult', {
     KELP_STRATEGY_KEY: str
 })
 
@@ -37,12 +37,12 @@ class Strategy(Generic[T, ReducedT]):
         raise NotImplementedError()
 
 
-def __with_strategy_key(reduce_function: Callable[P, dict], strategy_name: str) -> Callable[P, ReductionResult]:
+def __with_strategy_key(reduce_function: Callable[P, dict], strategy_name: str) -> Callable[P, CustomReductionResult]:
     """
     Wraps a custom_strategies reducer with functionality that is common to every custom_strategies reducer
     """
     @wraps(reduce_function)
-    def wrapped(*args: P.args, **kwargs: P.kwargs) -> ReductionResult:
+    def wrapped(*args: P.args, **kwargs: P.kwargs) -> CustomReductionResult:
         result = reduce_function(*args, **kwargs)
         result[KELP_STRATEGY_KEY] = strategy_name
 
@@ -79,8 +79,7 @@ def register_strategy(
     if isinstance(supported_types, type):
         supported_types = [supported_types]
 
-    def decorator(cls: Type[Strategy]):
-
+    def decorator(cls: Type[Strategy]) -> Type[Strategy]:
         _register_pickling_strategy_name(
             strategy_name,
             reduce_function=cls.reduce,

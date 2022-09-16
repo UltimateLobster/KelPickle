@@ -2,16 +2,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, TypedDict
 
+from kelpickle.common import Jsonable
 from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
 
 if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler, ReductionResult
+    from kelpickle.kelpickling import Pickler, Unpickler
 
 
 class DatetimeStrategyResult(TypedDict):
     value: str
     fold: int
-    tzinfo: ReductionResult
+    tzinfo: Jsonable
 
 
 @register_strategy('datetime', supported_types=datetime)

@@ -6,7 +6,7 @@ from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, reg
 from kelpickle.common import JsonList
 
 if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler, ReductionResult
+    from kelpickle.kelpickling import Pickler, Unpickler
 
 
 class SetReductionResult(TypedDict):

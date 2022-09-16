@@ -2,7 +2,8 @@ from __future__ import annotations
 from datetime import time
 from typing import TYPE_CHECKING, TypedDict
 
-from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy, ReductionResult
+from kelpickle.common import Jsonable
+from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
 
 if TYPE_CHECKING:
     from kelpickle.kelpickling import Pickler, Unpickler
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
 class TimeStrategyResult(TypedDict):
     value: str
     fold: int
-    tzinfo: ReductionResult
+    tzinfo: Jsonable
 
 
 @register_strategy('time', supported_types=time)

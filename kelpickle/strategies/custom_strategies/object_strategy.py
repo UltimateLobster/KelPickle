@@ -10,11 +10,11 @@ from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias, 
 from typing_extensions import NotRequired
 
 from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
-from kelpickle.common import JsonList, PicklingError, Json
+from kelpickle.common import JsonList, PicklingError, Json, Jsonable
 from kelpickle.strategies.custom_strategies.import_strategy import restore_import_string, get_import_string
 
 if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler, ReductionResult
+    from kelpickle.kelpickling import Pickler, Unpickler
 
 DEFAULT_REDUCE = object.__reduce__
 DEFAULT_REDUCE_EX = object.__reduce_ex__
@@ -180,9 +180,9 @@ class CustomReduceResult(TypedDict):
 
 class CustomStateResult(TypedDict):
     type: ImportString
-    state:  NotRequired[ReductionResult]
-    new_args: NotRequired[list[Any]]
-    new_kwargs: NotRequired[dict[str, Any]]
+    state:  NotRequired[Jsonable]
+    new_args: NotRequired[JsonList]
+    new_kwargs: NotRequired[Json]
 
 
 ObjectReductionResult: TypeAlias = CustomStateResult | CustomReduceResult

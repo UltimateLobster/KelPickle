@@ -1,5 +1,5 @@
 from kelpickle.common import NATIVE_TYPES
-from kelpickle.kelpickling import restore_reference
+from kelpickle.kelpickling import restore_reference, REFERENCE_STRATEGY_NAME
 from kelpickle.strategies.custom_strategies.custom_strategy import (
     restore_with_non_json_strategy,
     _register_unpickling_strategy_name
@@ -48,18 +48,18 @@ for native_type in NATIVE_TYPES:
     )
 
 _register_unpickling_strategy_name(
-    'reference',
+    REFERENCE_STRATEGY_NAME,
     restore_function=restore_reference,
 )
 
 # Import all of the builtin strategies in order to register them
-from kelpickle.strategies.custom_strategies.bytes_strategy import BytesStrategy
-from kelpickle.strategies.custom_strategies.date_strategy import DateStrategy
-from kelpickle.strategies.custom_strategies.datetime_strategy import DatetimeStrategy
-from kelpickle.strategies.custom_strategies.import_strategy import ImportStrategy
-from kelpickle.strategies.custom_strategies.object_strategy import ObjectStrategy
-from kelpickle.strategies.custom_strategies.set_strategy import SetStrategy
-from kelpickle.strategies.custom_strategies.time_strategy import TimeStrategy
-from kelpickle.strategies.custom_strategies.timedelta_strategy import TimeDeltaStrategy
-from kelpickle.strategies.custom_strategies.tuple_strategy import TupleStrategy
-from kelpickle.strategies.custom_strategies.tzinfo_strategy import TzInfoStrategy
+from kelpickle.strategies.custom_strategies.bytes_strategy import BytesStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.date_strategy import DateStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.datetime_strategy import DatetimeStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.import_strategy import ImportStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.object_strategy import ObjectStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.set_strategy import SetStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.time_strategy import TimeStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.timedelta_strategy import TimeDeltaStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.tuple_strategy import TupleStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.tzinfo_strategy import TzInfoStrategy  # noqa: F401,E402

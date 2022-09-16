@@ -21,7 +21,7 @@ def reduce_dict(instance: dict, pickler: Pickler) -> Json:
         #      pickling and unpickling.
         reduce_key(key, pickler, relative_key=f"{i}_KEY"): pickler.reduce(value, relative_key=str(i))
         for i, (key, value) in enumerate(instance.items())
- }
+    }
 
 
 def restore_dict(reduced_object: Json, unpickler: Unpickler) -> dict:
