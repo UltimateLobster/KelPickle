@@ -1,19 +1,47 @@
+from typing import Any
+
+
 class PicklingError(Exception):
     """
     Error that occurs during the pickling process
     """
-    pass
+    def __init__(self, message: str, *, instance: Any):
+        super(f"During the pickling process of {instance}. The following error has occurred: {message}")
+        self.instance = instance
+
+
+class ReductionError(PicklingError):
+    """
+    Error that occurs during the reduce stage of the pickling process
+    """
+
+
+class ReductionReferenceCollision(ReductionError):
+    """
+    Error that occurs when more than one instances try to be recorded under the same reference
+    """
 
 
 class UnpicklingError(Exception):
     """
     Error that occurs during the unpickling process
     """
-    pass
 
 
-class UnsupportedStrategy(UnpicklingError):
+class RestoreError(UnpicklingError):
     """
-    Error that occurs if encountered an object that was pickled using an unsupported custom_strategies
+    Error that occurs when the restoration process cannot be completed
     """
-    pass
+
+
+class UnsupportedStrategy(RestoreError):
+    """
+    Error that occurs if tried to restore an object that was pickled using an unsupported strategy
+    """
+
+
+class RestorationReferenceCollision(RestoreError):
+    """
+    Error that occurs when during the restoration process, multiple instances tried to be recorded under the same
+    reference name
+    """

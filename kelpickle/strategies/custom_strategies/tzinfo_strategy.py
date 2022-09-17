@@ -1,12 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, TypedDict
+from typing import Optional, TypedDict
 from datetime import tzinfo, datetime
 
 from kelpickle.common import Jsonable
 from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
-
-if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler
+from kelpickle.kelpickling import Pickler, Unpickler
 
 _some_datetime = datetime.now()
 

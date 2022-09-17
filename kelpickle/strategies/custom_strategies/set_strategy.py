@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict
+from typing import TypedDict
 
 from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
 from kelpickle.common import JsonList
-
-if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler
+from kelpickle.kelpickling import Pickler, Unpickler
 
 
 class SetReductionResult(TypedDict):

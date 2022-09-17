@@ -4,17 +4,15 @@ import sys
 
 from pickle import DEFAULT_PROTOCOL
 from copyreg import __newobj__, __newobj_ex__  # type: ignore
-from typing import Any, TYPE_CHECKING, Optional, Iterable, Callable, TypeAlias, Type, Sequence, TypeVar, cast, Union, \
-    TypedDict
+from typing import Any, Optional, Iterable, Callable, TypeAlias, Type, Sequence, TypeVar, cast, Union, TypedDict
 
 from typing_extensions import NotRequired
 
 from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
-from kelpickle.common import JsonList, PicklingError, Json, Jsonable
+from kelpickle.common import JsonList, Json, Jsonable
+from kelpickle.errors import ReductionError
 from kelpickle.strategies.custom_strategies.import_strategy import restore_import_string, get_import_string
-
-if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler
+from kelpickle.kelpickling import Pickler, Unpickler
 
 DEFAULT_REDUCE = object.__reduce__
 DEFAULT_REDUCE_EX = object.__reduce_ex__
@@ -219,8 +217,8 @@ class ObjectStrategy(Strategy):
                     result["new_args"] = cast(JsonList, pickler.reduce(new_args, relative_key="new_args"))
 
             else:
-                raise PicklingError(f"Instance of type {instance_type} cannot be pickled. The default "
-                                    f"implementation of the reduce protocol yields an unsupported result.")
+                raise ReductionError(f"Instance of type {instance_type} cannot be pickled. The default "
+                                     f"implementation of the reduce protocol yields an unsupported result.")
 
             instance_state = reduce_result[2]
             if instance_state is not None:
@@ -232,8 +230,8 @@ class ObjectStrategy(Strategy):
             # The result is an import string that's missing the module part.
             containing_module = get_containing_module(reduce_result)
             if containing_module is None:
-                raise PicklingError(f"Could not pickle object of type {type(instance)} with use_python_reduce result "
-                                    f"{reduce_result}, it is not importable from any module.")
+                raise ReductionError(f"Could not pickle object of type {type(instance)} with use_python_reduce result "
+                                     f"{reduce_result}, it is not importable from any module.")
 
             return {'reduce': f"{containing_module}/{reduce_result}"}
 
@@ -275,7 +273,7 @@ class ObjectStrategy(Strategy):
             # Object was not serialized using __reduce__
             reduced_object = cast(CustomStateResult, reduced_object)
             flattened_instance_type = reduced_object['type']
-            instance_type = cast(Type[Any], restore_import_string(flattened_instance_type))
+            instance_type = cast(type, restore_import_string(flattened_instance_type))
 
             # TODO: Find a way to not restore the args and kwargs if they are not given. Not only will it optimize, it
             #  will also make the custom_strategies not being aware of the pickler's format (Which is arguably even more

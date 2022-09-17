@@ -10,7 +10,7 @@ from kelpickle.strategies.internal_strategies.internal_strategy import (
     Restorer
 )
 from kelpickle.strategies.internal_strategies.dict_strategy import restore_dict
-from kelpickle.common import Json, KELP_STRATEGY_KEY
+from kelpickle.common import Json, STRATEGY_KEY
 from kelpickle.errors import UnsupportedStrategy
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ ReducedT = TypeVar('ReducedT', bound=Json)
 __name_to_unpickling_strategy: dict[str, UnpicklingStrategy] = {}
 
 CustomReductionResult = TypedDict('CustomReductionResult', {
-    KELP_STRATEGY_KEY: str
+    STRATEGY_KEY: str
 })
 
 
@@ -44,7 +44,7 @@ def __with_strategy_key(reduce_function: Callable[P, dict], strategy_name: str) 
     @wraps(reduce_function)
     def wrapped(*args: P.args, **kwargs: P.kwargs) -> CustomReductionResult:
         result = reduce_function(*args, **kwargs)
-        result[KELP_STRATEGY_KEY] = strategy_name
+        result[STRATEGY_KEY] = strategy_name
 
         return result
     return wrapped
@@ -59,7 +59,7 @@ def restore_with_non_json_strategy(reduced_instance: Json, unpickler: 'Unpickler
     :param unpickler: The unpickler to be used for any inner members that should be restored as well.
     :return: The original object as was originally passed to Pickler's "reduce" function
     """
-    strategy_name: Optional[str] = reduced_instance.get(KELP_STRATEGY_KEY)
+    strategy_name: Optional[str] = reduced_instance.get(STRATEGY_KEY)
     if strategy_name is None:
         return restore_dict(cast(Json, reduced_instance), unpickler)
 

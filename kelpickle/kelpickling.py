@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import json
+from typing import Any, Optional
 from pickle import DEFAULT_PROTOCOL
 
-from typing import Any, Optional
+from bidict import bidict
 
-from kelpickle.common import KELP_STRATEGY_KEY, Jsonable
+
+from kelpickle.common import STRATEGY_KEY, Jsonable
+from kelpickle.errors import ReductionReferenceCollision, RestorationReferenceCollision
 from kelpickle.strategies.internal_strategies.internal_strategy import (
     get_pickling_strategy,
     get_unpickling_strategy,
     PicklingStrategy,
     UnpicklingStrategy,
 )
-from kelpickle.strategies.custom_strategies.custom_strategy import CustomReductionResult
+from kelpickle.strategies.custom_strategies.custom_strategy import CustomReductionResult, \
+    _register_unpickling_strategy_name
 
 ROOT_RELATIVE_KEY = "$ROOT"
 REFERENCE_STRATEGY_NAME = "reference"
@@ -28,11 +32,11 @@ class Pickler:
     def __init__(self) -> None:
         self.current_path: list[str] = []
         # Mapping between the id of encountered instances and their references in case we wish to reuse.
-        self.instances_references: dict[int, str] = {}
+        self.__instances_references: bidict[int, str] = bidict({})
         self.__default_strategy: PicklingStrategy = get_pickling_strategy(object)
 
     def _clean_cache(self) -> None:
-        self.instances_references = {}
+        self.__instances_references.clear()
 
     def generate_current_reference(self) -> str:
         """
@@ -80,7 +84,7 @@ class Pickler:
             instance_type = instance.__class__
             strategy = get_pickling_strategy(instance_type)
             if strategy.auto_generate_references:
-                reference_result = self._attempt_reduce_by_reference(instance)
+                reference_result = self.attempt_reduce_by_reference(instance)
                 if reference_result:
                     return reference_result
 
@@ -105,7 +109,7 @@ class Pickler:
     ) -> Jsonable:
         return pickling_strategy.reduce_function(instance, self)
 
-    def _attempt_reduce_by_reference(self, instance: Any) -> Optional[ReferenceReductionResult]:
+    def attempt_reduce_by_reference(self, instance: Any) -> Optional[ReferenceReductionResult]:
         """
         Attempt to reduce an instance using the reference custom_strategies. If this is the first attempt, the instance
         will not be reduced and None will be returned. Otherwise, the result of the reduction by reference will be
@@ -115,32 +119,29 @@ class Pickler:
         :return: The reduced instance
         """
         instance_id = id(instance)
-        existing_reference_name = self.instances_references.get(instance_id)
+        existing_reference_name = self.__instances_references.get(instance_id)
         if existing_reference_name:
-            return {KELP_STRATEGY_KEY: REFERENCE_STRATEGY_NAME, "reference": existing_reference_name}
+            return {STRATEGY_KEY: REFERENCE_STRATEGY_NAME, "reference": existing_reference_name}
 
-        self.instances_references[id(instance)] = self.generate_current_reference()
+        current_reference = self.generate_current_reference()
+        # While unlikely to be the case, we need to make sure the current reference is not referencing any other
+        # instance. If so, this means something went wrong, and we have a collision. We would like to raise an exception
+        # here instead of letting the user see the problem only upon unpickling.
+        registered_instance_id = self.__instances_references.inverse.setdefault(current_reference, instance_id)
+        if registered_instance_id is not instance_id:
+            raise ReductionReferenceCollision(f"Instance id {instance_id} was trying to be recorded under the reference"
+                                              f" name {current_reference} but it is already used for instance id "
+                                              f"{registered_instance_id}", instance=instance)
         return None
-
-
-def restore_reference(reduced_object: ReferenceReductionResult, unpickler: Unpickler) -> Any:
-    """
-    Restore an instance using the reference custom_strategies.
-
-    :param reduced_object: The reference that was generated for the instance
-    :param unpickler: The unpickler that has been used to record the references
-    :return: The restored instance
-    """
-    return unpickler.reference_to_restored_instances[reduced_object["reference"]]
 
 
 class Unpickler:
     def __init__(self) -> None:
         self.current_path: list[str] = []
-        self.reference_to_restored_instances: dict[str, Any] = {}
+        self.__reference_to_restored_instances: dict[str, Any] = {}
 
     def _clear_cache(self) -> None:
-        self.reference_to_restored_instances = {}
+        self.__reference_to_restored_instances.clear()
 
     def generate_current_reference(self) -> str:
         """
@@ -168,7 +169,7 @@ class Unpickler:
         self.current_path.append(relative_key)
         try:
             result = self.default_restore(reduced_object)
-            self.reference_to_restored_instances[self.generate_current_reference()] = result
+            self.record_reference(result)
 
             return result
         finally:
@@ -177,3 +178,42 @@ class Unpickler:
     def default_restore(self, reduced_object: Jsonable) -> Any:
         strategy: UnpicklingStrategy = get_unpickling_strategy(reduced_object.__class__)
         return strategy.restore_function(reduced_object, self)
+
+    def record_reference(self, instance: Any) -> None:
+        current_reference = self.generate_current_reference()
+        registered_instance = self.__reference_to_restored_instances.setdefault(current_reference, instance)
+
+        if registered_instance is not instance:
+            raise RestorationReferenceCollision(f"Cannot record instance {instance} under the reference "
+                                                f"{current_reference}. The reference is already used by "
+                                                f"{registered_instance}")
+
+
+def restore_reference(reduced_object: ReferenceReductionResult, unpickler: Unpickler) -> Any:
+    """
+    Restore an instance using the reference custom_strategies.
+
+    :param reduced_object: The reference that was generated for the instance
+    :param unpickler: The unpickler that has been used to record the references
+    :return: The restored instance
+    """
+    return unpickler._Unpickler__reference_to_restored_instances[reduced_object["reference"]]
+
+
+_register_unpickling_strategy_name(
+    REFERENCE_STRATEGY_NAME,
+    restore_function=restore_reference,
+)
+
+
+# Import all the builtin strategies in order to register them
+from kelpickle.strategies.custom_strategies.bytes_strategy import BytesStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.date_strategy import DateStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.datetime_strategy import DatetimeStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.import_strategy import ImportStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.object_strategy import ObjectStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.set_strategy import SetStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.time_strategy import TimeStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.timedelta_strategy import TimeDeltaStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.tuple_strategy import TupleStrategy  # noqa: F401,E402
+from kelpickle.strategies.custom_strategies.tzinfo_strategy import TzInfoStrategy  # noqa: F401,E402

@@ -14,4 +14,10 @@ def reduce_list(instance: list, pickler: Pickler) -> JsonList:
 
 
 def restore_list(reduced_object: JsonList, unpickler: Unpickler) -> list:
-    return [unpickler.restore(member, relative_key=str(i)) for i, member in enumerate(reduced_object)]
+    result = []
+    unpickler.record_reference(result)
+
+    for i, member in enumerate(reduced_object):
+        result.append(unpickler.restore(member, relative_key=str(i)))
+
+    return result

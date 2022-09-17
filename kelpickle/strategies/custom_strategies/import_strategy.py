@@ -8,12 +8,10 @@ from types import (
     GetSetDescriptorType,
     MemberDescriptorType,
 )
-from typing import TYPE_CHECKING, Any, Type, TypeAlias, TypedDict
+from typing import Any, Type, TypeAlias, TypedDict
 
 from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
-
-if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler
+from kelpickle.kelpickling import Pickler, Unpickler
 
 Importable: TypeAlias = (
     Type[Any] |

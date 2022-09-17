@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from types import NoneType
-from typing import TypeAlias, Any, Literal
+from typing import TypeAlias, Any
 
 # Obviously this is not the correct way to type these. Unfortunately the recursive nature of JSON prevents us to do it.
 # This will hopefully be supported in the future which will let us change this correctly
@@ -11,13 +12,11 @@ Json: TypeAlias = dict[str, Any]
 
 Jsonable: TypeAlias = Json | JsonList | JsonNative
 
+SAVED_WORDS_PREFIX = f"kelp/"
+STRATEGY_KEY: str = f'{SAVED_WORDS_PREFIX}strategy'
 
-NATIVE_TYPES = (int, float, bool, str, NoneType)
-KELP_STRATEGY_KEY: Literal["kelp/strategy"] = 'kelp/strategy'
 
-
-class PicklingError(Exception):
-    """
-    Error that occurs during the pickling process
-    """
-    pass
+@dataclass(frozen=True, slots=True)
+class Unrestorable:
+    reduced_object: Jsonable
+    reason: str

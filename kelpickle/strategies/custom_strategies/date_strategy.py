@@ -1,11 +1,9 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, TypedDict
+from typing import TypedDict
 from datetime import date
 
 from kelpickle.strategies.custom_strategies.custom_strategy import Strategy
-
-if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler
+from kelpickle.kelpickling import Pickler, Unpickler
 
 
 class DateReductionResult(TypedDict):

@@ -1,11 +1,9 @@
 from __future__ import annotations
 from datetime import timedelta
-from typing import TYPE_CHECKING, TypedDict
+from typing import TypedDict
 
 from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
-
-if TYPE_CHECKING:
-    from kelpickle.kelpickling import Pickler, Unpickler
+from kelpickle.kelpickling import Pickler, Unpickler
 
 
 class TimedeltaStrategyResult(TypedDict):
