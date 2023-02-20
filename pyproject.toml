@@ -2,11 +2,11 @@
 name = "kelpickle"
 description = "TODO: Add description"
 version = "0.0.1a"
-requires-python = '~=3.10'
+requires-python = '~=3.11'
 readme = "README.md"
 classifiers = [
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.10"
+    "Programming Language :: Python :: 3.11"
 ]
 keywords = [
     "pickle",
@@ -48,56 +48,10 @@ optional-dependencies = {dev = {file = "requirements-dev.txt"}}
 
 
 [tool.pytest.ini_options]
-addopts = "--cov=./kelpickle --cov-report term-missing --cov-report=html:./reports/coverage/html_results --cov-report xml:./reports/coverage/coverage-results.xml --junitxml=./reports/test-results.xml"
+#addopts = "--cov=./kelpickle --cov-report term-missing --cov-report=html:./reports/coverage/html_results --cov-report xml:./reports/coverage/coverage-results.xml --junitxml=./reports/test-results.xml"
 testpaths = [
     "tests"
 ]
-
-[tool.tox]
-legacy_tox_ini="""
-[tox]
-envlist = py{310}-{windows,linux}-pytest,py{310}-{windows,linux}-{flake8,mypy}
-isolated_build = True
-
-[gh-actions]
-python =
-    3.10: py310
-
-[gh-actions:env]
-PLATFORM =
-    windows-latest: windows
-    ubuntu-latest: linux
-
-[testenv]
-platform =
-    linux: linux
-    windows: win32
-allowlist_externals =
-    windows: cmd
-    windows: powershell
-    linux: mkdir
-    linux: bash
-commands_pre =
-    linux: mkdir -p ./reports
-    windows: cmd /c if not exist .\\reports mkdir .\\reports
-    python -m pip install pip -U
-    pip install .[dev]
-
-[testenv:py{310}-{windows,linux}-pytest]
-commands =
-    linux: bash -c "pytest . | tee ./reports/test-console-results.txt"
-    windows: powershell /c "pytest | Tee-Object .\\reports\\test-console-results.txt"
-    windows: python -c "file = open('./reports/test-console-results.txt', 'rb');results=file.read();file.close();file = open('./reports/test-console-results.txt', 'wb');file.write(results.replace(b'\\r\\n', b'\\n'));file.close()"
-
-
-[testenv:py{310}-{windows,linux}-mypy]
-commands =
-    mypy kelpickle
-
-[testenv:py{310}-{windows,linux}-flake8]
-commands =
-    flake8 kelpickle tests
-"""
 
 [tool.mypy]
 warn_unused_configs = true

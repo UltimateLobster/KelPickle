@@ -45,3 +45,16 @@ class RestorationReferenceCollision(RestoreError):
     Error that occurs when during the restoration process, multiple instances tried to be recorded under the same
     reference name
     """
+
+
+class StrategyConflictError(ValueError):
+    pass
+
+
+class DuplicateStrategyNameError(StrategyConflictError):
+    pass
+
+
+class UnsupportedPicklingType(TypeError):
+    pass
+

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import TypedDict
 
 from kelpickle.common import Jsonable
-from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
+from kelpickle.strategies.base_strategy import BaseStrategy, register_strategy
 from kelpickle.kelpickling import Pickler, Unpickler
 
 
@@ -13,19 +13,17 @@ class DatetimeStrategyResult(TypedDict):
     tzinfo: Jsonable
 
 
-@register_strategy('datetime', supported_types=datetime)
-class DatetimeStrategy(Strategy):
-    @staticmethod
-    def reduce(instance: datetime, pickler: Pickler) -> DatetimeStrategyResult:
+@register_strategy(name='datetime', supported_types=datetime, auto_generate_reduction_references=True, consider_subclasses=False)
+class DatetimeStrategy(BaseStrategy):
+    def reduce(self, instance: datetime, pickler: Pickler) -> DatetimeStrategyResult:
         return {
             'value': instance.isoformat(),
             'fold': instance.fold,
             'tzinfo': pickler.reduce(instance.tzinfo, relative_key='tzinfo')
         }
 
-    @staticmethod
-    def restore(reduced_object: DatetimeStrategyResult, unpickler: Unpickler) -> datetime:
-        restored_tzinfo = unpickler.restore(reduced_object['tzinfo'], relative_key='tzinfo')
-        restored_datetime = datetime.fromisoformat(reduced_object['value'])
+    def restore_base(self, reduced_instance: DatetimeStrategyResult, unpickler: Unpickler) -> datetime:
+        restored_tzinfo = unpickler.restore(reduced_instance['tzinfo'], relative_key='tzinfo')
+        restored_datetime = datetime.fromisoformat(reduced_instance['value'])
 
-        return restored_datetime.replace(fold=reduced_object['fold'], tzinfo=restored_tzinfo)
+        return restored_datetime.replace(fold=reduced_instance['fold'], tzinfo=restored_tzinfo)

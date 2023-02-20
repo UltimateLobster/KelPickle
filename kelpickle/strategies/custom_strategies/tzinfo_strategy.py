@@ -3,7 +3,7 @@ from typing import Optional, TypedDict
 from datetime import tzinfo, datetime
 
 from kelpickle.common import Jsonable
-from kelpickle.strategies.custom_strategies.custom_strategy import Strategy, register_strategy
+from kelpickle.strategies.base_strategy import BaseStrategy, register_strategy
 from kelpickle.kelpickling import Pickler, Unpickler
 
 _some_datetime = datetime.now()
@@ -14,10 +14,9 @@ class TzInfoStrategyResult(TypedDict):
     tzinfo: Jsonable
 
 
-@register_strategy('tzinfo', supported_types=tzinfo, consider_subclasses=True)
-class TzInfoStrategy(Strategy):
-    @staticmethod
-    def reduce(instance: tzinfo, pickler: Pickler) -> TzInfoStrategyResult:
+@register_strategy(name='tzinfo', supported_types=tzinfo, auto_generate_reduction_references=True, consider_subclasses=True)
+class TzInfoStrategy(BaseStrategy):
+    def reduce(self, instance: tzinfo, pickler: Pickler) -> TzInfoStrategyResult:
         offset_delta = instance.utcoffset(_some_datetime)
         offset_seconds = offset_delta.total_seconds() if offset_delta else None
         return {
@@ -25,9 +24,8 @@ class TzInfoStrategy(Strategy):
             'offset': offset_seconds
         }
 
-    @staticmethod
-    def restore(reduced_object: TzInfoStrategyResult, unpickler: Unpickler) -> tzinfo:
-        restored_tzinfo = unpickler.default_restore(reduced_object['tzinfo'])
+    def restore_base(self, reduced_instance: TzInfoStrategyResult, unpickler: Unpickler) -> tzinfo:
+        restored_tzinfo = unpickler.default_restore(reduced_instance['tzinfo'])
         assert isinstance(restored_tzinfo, tzinfo), f"Expected tzinfo upon unpickling. Received {type(restored_tzinfo)}"
 
         return restored_tzinfo
